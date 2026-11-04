@@ -38,21 +38,19 @@ def enviar_a_sqs(event_data: dict):
                 }
             },
         )
-        print(
-            f"🚀 [{RSU_ID}] Evento '{event_type}' de {event_data.get('source_id')} reenviado a SQS"
-        )
+        print(f"🚀 [{RSU_ID}] Evento '{event_type}' de {event_data.get('source_id')} reenviado a SQS")
     except Exception as e:
         print(f"❌ [{RSU_ID}] Error al reenviar a SQS: {e}")
 
 
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
-        print(f"✅ [{RSU_ID}] Conectado al Broker MQTT en {MQTT_HOST}:{MQTT_PORT}")
+        print(f"[{RSU_ID}] Conectado al Broker MQTT en {MQTT_HOST}:{MQTT_PORT}")
         # Escuchar la telemetría de todos los vehículos conectados a este RSU
         client.subscribe("vehiculos/+/telemetria")
-        print(f"📡 [{RSU_ID}] Suscrito a 'vehiculos/+/telemetria'")
+        print(f"[{RSU_ID}] Suscrito a 'vehiculos/+/telemetria'")
     else:
-        print(f"❌ [{RSU_ID}] Error al conectar a MQTT, código: {rc}")
+        print(f"[{RSU_ID}] Error al conectar a MQTT, código: {rc}")
 
 
 def on_message(client, userdata, msg):
@@ -61,17 +59,15 @@ def on_message(client, userdata, msg):
         payload_str = msg.payload.decode("utf-8")
         event_data = json.loads(payload_str)
 
-        print(
-            f"📥 [{RSU_ID}] Recibido MQTT en topic '{msg.topic}': {event_data.get('source_id')}"
-        )
+        print(f"[{RSU_ID}] Recibido MQTT en topic '{msg.topic}': {event_data.get('source_id')}")
 
         # Reenviar directamente a SQS sin procesar
         enviar_a_sqs(event_data)
 
     except json.JSONDecodeError:
-        print(f"⚠️ [{RSU_ID}] Trama no válida recibida en {msg.topic}")
+        print(f"[{RSU_ID}] Trama no válida recibida en {msg.topic}")
     except Exception as e:
-        print(f"⚠️ [{RSU_ID}] Error procesando mensaje MQTT: {e}")
+        print(f"[{RSU_ID}] Error procesando mensaje MQTT: {e}")
 
 
 def main():
@@ -79,13 +75,12 @@ def main():
 
     # 1. Obtener URL de la cola SQS
     try:
-        print(f"🔍 [{RSU_ID}] Obteniendo URL de la cola SQS '{SQS_QUEUE_NAME}'...")
+        print(f"[{RSU_ID}] Obteniendo URL de la cola SQS '{SQS_QUEUE_NAME}'...")
         respuesta = sqs.get_queue_url(QueueName=SQS_QUEUE_NAME)
         QUEUE_URL = respuesta["QueueUrl"]
-        print(f"🔗 [{RSU_ID}] Conectado a SQS: {QUEUE_URL}")
+        print(f"[{RSU_ID}] Conectado a SQS: {QUEUE_URL}")
     except Exception as e:
-        print(f"❌ [{RSU_ID}] Error obteniendo cola SQS: {e}")
-        print("Asegúrate de tener configuradas las credenciales de AWS.")
+        print(f"[{RSU_ID}] Error obteniendo cola SQS: {e}")
         return
 
     # 2. Configurar e iniciar cliente MQTT
@@ -100,7 +95,7 @@ def main():
         cliente_mqtt.loop_start()
 
         print(
-            f"🟢 [{RSU_ID}] RSU operativo. Presiona Ctrl+C para salir.\n"
+            f"[{RSU_ID}] RSU operativo. Presiona Ctrl+C para salir.\n"
             + "-" * 50
         )
 
@@ -108,7 +103,7 @@ def main():
             time.sleep(1)
 
     except KeyboardInterrupt:
-        print(f"\n🛑 [{RSU_ID}] Apagando RSU...")
+        print(f"\n[{RSU_ID}] Apagando RSU...")
     finally:
         cliente_mqtt.loop_stop()
         cliente_mqtt.disconnect()
