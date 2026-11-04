@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Monitor V2X · Carretera 5 km</title>
+
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/app.js" defer></script>
+</head>
+
+<body>
+    <header class="cabecera">
+        <div class="cabecera-marca">
+            <span class="cabecera-punto" aria-hidden="true"></span>
+            <span class="cabecera-etiqueta">V2X Live</span>
+        </div>
+
+        <h1>Simulación V2X en tiempo real</h1>
+
+        <p class="cabecera-subtitulo">
+            Monitorización de proximidad · Carretera de 5 km
+        </p>
+    </header>
+
+    <main>
+        <!-- El JavaScript muestra este panel cuando hay avisos. -->
+        <section
+            id="panel-avisos"
+            class="panel-avisos"
+            aria-labelledby="titulo-avisos"
+            aria-live="polite"
+        >
+            <div class="panel-avisos-cabecera">
+                <span class="panel-icono" aria-hidden="true">⚠</span>
+
+                <div>
+                    <h2 id="titulo-avisos">Avisos de proximidad</h2>
+                    <p>Vehículos a menos de 100 metros</p>
+                </div>
+            </div>
+
+            <ul id="lista-avisos"></ul>
+        </section>
+
+        <!-- Los coches se insertan en los carriles desde app.js. -->
+        <section
+            class="carretera-container"
+            aria-labelledby="titulo-trayecto"
+        >
+            <div class="carretera-cabecera">
+                <h2 id="titulo-trayecto">Trayecto en directo</h2>
+                <span class="carretera-distancia">5.000 m</span>
+            </div>
+
+            <div class="carril-label" id="etiqueta-ida">
+                <span>Sentido ida</span>
+                <span>0 km → 5 km</span>
+            </div>
+
+            <div
+                class="carril"
+                id="carril-ida"
+                role="group"
+                aria-labelledby="etiqueta-ida"
+            >
+                <div class="linea-discontinua" aria-hidden="true"></div>
+            </div>
+
+            <div class="carril-label" id="etiqueta-vuelta">
+                <span>Sentido vuelta</span>
+                <span>5 km → 0 km</span>
+            </div>
+
+            <div
+                class="carril"
+                id="carril-vuelta"
+                role="group"
+                aria-labelledby="etiqueta-vuelta"
+            >
+                <div class="linea-discontinua" aria-hidden="true"></div>
+            </div>
+
+            <div class="escala" aria-label="Escala de distancia del trayecto">
+                <span>0 km</span>
+                <span>1,25 km</span>
+                <span>2,5 km</span>
+                <span>3,75 km</span>
+                <span>5 km</span>
+            </div>
+        </section>
+
+        <!-- Tabla real; su apariencia de tarjetas se define en el CSS. -->
+        <section class="flota" aria-labelledby="titulo-flota">
+            <div class="flota-cabecera">
+                <h2 id="titulo-flota">Estado de la flota</h2>
+
+                <p>
+                    Posición, sentido, velocidad y estado de cada vehículo.
+                </p>
+            </div>
+
+            <div class="flota-tabla">
+                <table
+                    class="tabla-flota"
+                    aria-labelledby="titulo-flota"
+                >
+                    <thead class="flota-cabeceras">
+                        <tr>
+                            <th scope="col">Vehículo</th>
+                            <th scope="col">Posición</th>
+                            <th scope="col">Sentido</th>
+                            <th scope="col">Velocidad</th>
+                            <th scope="col">Estado</th>
+                        </tr>
+                    </thead>
+
+                    <tbody id="tabla-coches">
+                        <!-- app.js inserta las filas aquí. -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <noscript>
+        <p>
+            Necesitas activar JavaScript para visualizar los vehículos
+            y recibir las actualizaciones de la simulación.
+        </p>
+    </noscript>
+</body>
+</html>
