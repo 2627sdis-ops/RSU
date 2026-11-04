@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - V2X Service
+name: CI/CD Pipeline - V2X
  
 on: 
   push:
@@ -17,11 +17,12 @@ jobs:
         with: 
           python-version: '3.10'
 
-      - name: 3. Instalar dependencias y ejecutar tests unitarios
+      - name: 3. Instalar dependencias y ejecutar tests (Servidor)
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pytest app/test_main.py
+          pip install -r server/requirements.txt
+          pip install -r rsu/requirements.txt
+          pytest server/app/test_main.py
 
       - name: 4. Autenticar en AWS
         uses: aws-actions/configure-aws-credentials@v2
@@ -39,20 +40,24 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: mireposdis
-          IMAGE_TAG: ${{ github.sha }}
+          REPO_RSU: sdis-rsu
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          echo "IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
+          docker build -t $ECR_REGISTRY/$REPO_SERVER:latest ./server
+          docker push $ECR_REGISTRY/$REPO_SERVER:latest
+
+          docker build -t $ECR_REGISTRY/$REPO_RSU:latest ./rsu
+          docker push $ECR_REGISTRY/$REPO_RSU:latest
+          
+          echo "SERVER_URI=$ECR_REGISTRY/$REPO_SERVER:latest" >> $GITHUB_ENV
+          echo "RSU_URI=$ECR_REGISTRY/$REPO_RSU:latest" >> $GITHUB_ENV
 
       - name: 7. Generar manifiesto de despliegue y subir a S3 (sdisprueba)
         run: |
           cat <<EOF > manifest.json
           {
-            "service": "mireposdis",
             "version": "${{ github.sha }}",
-            "image_uri": "${{ env.IMAGE_URI }}",
+            "server_image_uri": "${{ env.SERVER_URI }}",
+            "rsu_image_uri": "${{ env.RSU_URI }}",
             "updated_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           }
           EOF
