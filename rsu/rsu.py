@@ -4,7 +4,7 @@ import os
 import time
 import threading
 import uuid
-
+import queue
 import boto3
 import paho.mqtt.client as mqtt
 
@@ -30,31 +30,55 @@ TIMEOUT_VEHICULO_S = 10.0
 # Frecuencia de comprobación de vehículos inactivos
 INTERVALO_LIMPIEZA_S = 1.0
 
+# COLA DE BUFFERING PARA AWS SQS
+cola_eventos = queue.Queue(maxsize=10000)
 
 
-
-def enviar_a_sqs(event_data: dict):
-    """Reenvía la trama recibida por MQTT directamente a la cola SQS en AWS."""
+def hilo_sqs_worker():
+    """
+    Hilo consumidor: procesa la cola de eventos y gestiona la política de 
+    buffering y reintentos en caso de desconexión con AWS SQS.
+    """
     global QUEUE_URL
-    if not QUEUE_URL:
-        return
+    print(f"[{RSU_ID}] Hilo worker de SQS iniciado y esperando eventos.")
 
-    try:
-        event_type = event_data.get("event_type", "position")
+    while not stop_event.is_set():
+        try:
+            # Extraemos un evento de la cola. Usamos timeout para poder 
+            # chequear stop_event.is_set() periódicamente y apagar limpiamente.
+            event_data = cola_eventos.get(timeout=1.0)
+        except queue.Empty:
+            continue
 
-        sqs.send_message(
-            QueueUrl=QUEUE_URL,
-            MessageBody=json.dumps(event_data),
-            MessageAttributes={
-                "TipoEvento": {
-                    "StringValue": event_type,
-                    "DataType": "String",
-                }
-            },
-        )
-        print(f"🚀 [{RSU_ID}] Evento '{event_type}' de {event_data.get('source_id')} reenviado a SQS")
-    except Exception as e:
-        print(f"❌ [{RSU_ID}] Error al reenviar a SQS: {e}")
+        exito = False
+        # Política de retención (Buffering / Retry): 
+        # Mientras no haya éxito y no nos manden apagar, seguimos reintentando.
+        while not exito and not stop_event.is_set():
+            if not QUEUE_URL:
+                time.sleep(2)
+                continue
+
+            try:
+                event_type = event_data.get("event_type", "position")
+                sqs.send_message(
+                    QueueUrl=QUEUE_URL,
+                    MessageBody=json.dumps(event_data),
+                    MessageAttributes={
+                        "TipoEvento": {
+                            "StringValue": event_type,
+                            "DataType": "String",
+                        }
+                    },
+                )
+                print(f"🚀 [{RSU_ID}] Evento '{event_type}' de {event_data.get('source_id')} reenviado a SQS")
+                
+                # Si llegamos aquí, el envío funcionó. Marcamos la tarea como hecha y salimos del bucle.
+                exito = True
+                cola_eventos.task_done()
+                
+            except Exception as e:
+                print(f"⚠️ [{RSU_ID}] Fallo de conexión con AWS SQS. Buffering activo. Reintentando en 5s... Error: {e}")
+                time.sleep(5)  # Esperar antes de reintentar el mismo mensaje
 
 
 # ============================================================
@@ -377,7 +401,7 @@ def on_message(client, userdata, msg):
         payload_str = msg.payload.decode("utf-8")
         event_data = json.loads(payload_str)
 
-        print(f"[{RSU_ID}] Recibido MQTT en topic '{msg.topic}': {event_data.get('source_id')}")
+        #print(f"[{RSU_ID}] Recibido MQTT en topic '{msg.topic}': {event_data.get('source_id')}")
 
         # 1. Actualizar la base de datos local del RSU.
         actualizar_estado_coche(event_data)
@@ -385,8 +409,11 @@ def on_message(client, userdata, msg):
         # 2. Comprobar posibles situaciones de proximidad.
         verificar_proximidad(client)
         
-        # Reenviar directamente a SQS sin procesar
-        enviar_a_sqs(event_data)
+        # 3. Enviar a la cola interna de buffering en lugar de hacer la llamada web
+        try:
+            cola_eventos.put_nowait(event_data)
+        except queue.Full:
+            print(f"⚠️ [{RSU_ID}] ADVERTENCIA: La cola de buffering está LLENA. Descartando mensaje de {event_data.get('source_id')}")
 
     except json.JSONDecodeError:
         print(f"[{RSU_ID}] Trama no válida recibida en {msg.topic}")
@@ -418,14 +445,21 @@ def main():
         cliente_mqtt.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
         cliente_mqtt.loop_start()
 
+        
         # 3. Iniciar el hilo encargado de limpiar vehículos.
         hilo_watchdog = threading.Thread(
             target=hilo_limpieza,
             args=(cliente_mqtt,),
             daemon=True
         )
-
         hilo_watchdog.start()
+
+        # 4. Iniciar el hilo de envío a SQS (Worker)
+        hilo_sqs = threading.Thread(
+            target=hilo_sqs_worker,
+            daemon=True
+        )
+        hilo_sqs.start()
 
         
         print(
