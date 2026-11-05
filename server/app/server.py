@@ -17,6 +17,16 @@ PORT = int(os.getenv("PORT", "5000"))
 
 sqs = boto3.client("sqs", region_name=AWS_REGION) 
 
+############################################## Nuevo
+SNS_TOPIC_ARN = os.getenv(
+    "SNS_TOPIC_ARN",
+    "arn:aws:sns:us-east-1:TU_ID_CUENTA:v2x-alertas"
+)
+
+sns = boto3.client("sns", region_name=AWS_REGION)
+###################################################3
+
+
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
@@ -67,6 +77,10 @@ def verificar_proximidad():
     PAREJAS_NOTIFICADAS.difference_update(parejas_a_remover)
     alertas_proximidad_activas = alertas
 
+    ##########################################################333
+    # NUEVO: enviar las alertas al topic SNS
+    publicar_alertas_sns(alertas)
+    ###########################################################
 
 def consumidor_sqs(queue_url):
     # lee de la cola sqs y actualiza los coches
@@ -125,6 +139,36 @@ def consumidor_sqs(queue_url):
 
         time.sleep(0.1)
 
+
+########################################### Nuevo
+def publicar_alertas_sns(alertas):
+    if not alertas:
+        return
+
+    mensaje = {
+        "tipo": "alerta_proximidad",
+        "timestamp": datetime.now().isoformat(),
+        "alertas": alertas,
+        "coches": estado_coches
+    }
+
+    try:
+        respuesta = sns.publish(
+            TopicArn=SNS_TOPIC_ARN,
+            Message=json.dumps(mensaje, ensure_ascii=False),
+            Subject="AlertaProximidadV2X",
+            MessageAttributes={
+                "event_type": {
+                    "DataType": "String",
+                    "StringValue": "proximity_alert"
+                }
+            }
+        )
+        print(f" Alerta publicada en SNS: {respuesta['MessageId']}", flush=True)
+
+    except Exception as error:
+        print(f"Error publicando en SNS: {error}", flush=True)
+###################################################
 
 class ServidorHTTPNativo(BaseHTTPRequestHandler):
     # Sirve la API JSON y los recursos estaticos
