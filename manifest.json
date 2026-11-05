@@ -4,4 +4,4 @@
   "rsu_image_uri": "${{ env.RSU_URI }}",
   "updated_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 }
- 
+  
