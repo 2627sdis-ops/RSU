@@ -2,6 +2,6 @@
   "version": "${{ github.sha }}",
   "server_image_uri": "${{ env.SERVER_URI }}",
   "rsu_image_uri": "${{ env.RSU_URI }}",
+  "sns_topic_arn": "${{ env.SNS_TOPIC_ARN }}",
   "updated_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 }
-  
