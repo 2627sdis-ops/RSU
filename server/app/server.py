@@ -31,10 +31,13 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
 # Variables globales para los coches y los eventos de proximidad
-estado_coches = {}
-alertas_proximidad_activas = []
-PAREJAS_NOTIFICADAS = set()  # Evita repetir avisos mientras siga activa la proximidad.
+#estado_coches = {}
+#alertas_proximidad_activas = []
+#PAREJAS_NOTIFICADAS = set()  # Evita repetir avisos mientras siga activa la proximidad.
+MAX_ALERTAS_CLOUD = 50
 
+alertas_cloud_activas = []
+alertas_cloud_lock = threading.Lock()
 
 def verificar_proximidad():
     # Procesado en servidor para alerta de proximidad
@@ -77,10 +80,32 @@ def verificar_proximidad():
     PAREJAS_NOTIFICADAS.difference_update(parejas_a_remover)
     alertas_proximidad_activas = alertas
 
-    ##########################################################333
+    ##########################################################333################################################################
     # NUEVO: enviar las alertas al topic SNS
     publicar_alertas_sns(alertas)
-    ###########################################################
+    ###############################################################################################################################33
+
+def registrar_alerta_cloud(evento: dict):
+    location = evento.get("location") or {}
+    payload = evento.get("payload") or {}
+
+    alerta = {
+        "event_id": evento.get("event_id"),
+        "event_type": evento.get("event_type", "desconocido"),
+        "source_id": evento.get("source_id", "desconocido"),
+        "rsu_id": evento.get("rsu_id", "desconocida"),
+        "x": location.get("x"),
+        "descripcion": payload.get(
+            "descripcion",
+            payload.get("description", "Sin descripción"),
+        ),
+        "timestamp": datetime.now().strftime("%H:%M:%S"),
+    }
+
+    with alertas_cloud_lock:
+        alertas_cloud_activas.insert(0, alerta)
+        del alertas_cloud_activas[MAX_ALERTAS_CLOUD:]
+##################################################################################################################
 
 def consumidor_sqs(queue_url):
     # lee de la cola sqs y actualiza los coches
