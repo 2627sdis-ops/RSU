@@ -63,6 +63,38 @@ async function actualizarSimulacion() {
         carrilVuelta.querySelectorAll('.coche').forEach(el => el.remove());
         tabla.innerHTML = '';
 
+
+        // Marcador del vehículo en la posición registrada al producirse el evento.
+        alertasCloud.forEach(alerta => {
+            const posicion = Number(alerta.x);
+        
+            if (!Number.isFinite(posicion)) {
+                return;
+            }
+        
+            const porcentaje = Math.min(
+                100,
+                Math.max(0, (posicion / LONGITUD_CARRETERA_M) * 100)
+            );
+        
+            const cocheEvento = document.createElement('div');
+            cocheEvento.className = 'coche alerta';
+            cocheEvento.style.left = `${porcentaje}%`;
+            cocheEvento.textContent = alerta.source_id
+                .replace('veh-', '')
+                .replace('Coche_', '');
+        
+            cocheEvento.title =
+                `${alerta.event_type}: ${alerta.descripcion} ` +
+                `(${posicion} m, ${alerta.timestamp})`;
+        
+            const carril = alerta.direction === 'vuelta'
+                ? carrilVuelta
+                : carrilIda;
+        
+            carril.appendChild(cocheEvento);
+        });
+
         Object.values(coches).forEach(coche => {
             const porcentaje = Math.min(100, Math.max(0, (coche.x / LONGITUD_CARRETERA_M) * 100));
 
