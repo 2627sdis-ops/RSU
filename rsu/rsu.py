@@ -426,6 +426,11 @@ def iniciar_servidor_sns():
     servidor.serve_forever()
 
 
+# Sólo los eventos distintos de "position" viajarán al Cloud.
+# Ejemplos: obra, accidente, carretera_cortada, emergencia...
+def debe_enviar_a_cloud(event_data: dict) -> bool:
+    return event_data.get("event_type", "position") != "position"
+
 # ============================================================
 # MQTT
 # ============================================================
@@ -454,14 +459,24 @@ def on_message(client, userdata, msg):
         actualizar_estado_coche(event_data)
         verificar_proximidad(client)
 
-        try:
-            cola_eventos.put_nowait(event_data)
-        except queue.Full:
-            print(
-                f"⚠️ [{RSU_ID}] ADVERTENCIA: La cola de buffering está "
-                f"LLENA. Descartando mensaje de "
-                f"{event_data.get('source_id')}"
-            )
+                # La telemetría normal se procesa sólo en el edge.
+        # Sólo eventos especiales se reenvían al Cloud por SQS.
+        if debe_enviar_a_cloud(event_data):
+            event_data["rsu_id"] = RSU_ID
+
+            try:
+                cola_eventos.put_nowait(event_data)
+
+                print(
+                    f"☁️ [{RSU_ID}] Evento '{event_data.get('event_type')}' "
+                    f"enviado al Cloud"
+                )
+
+            except queue.Full:
+                print(
+                    f"⚠️ [{RSU_ID}] Cola Cloud llena. Evento descartado: "
+                    f"{event_data.get('event_type')}"
+                )
 
     except json.JSONDecodeError:
         print(
