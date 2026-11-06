@@ -95,6 +95,7 @@ def registrar_alerta_cloud(evento: dict):
         "source_id": evento.get("source_id", "desconocido"),
         "rsu_id": evento.get("rsu_id", "desconocida"),
         "x": location.get("x"),
+        "direction": payload.get("direction", "ida"),
         "descripcion": payload.get(
             "descripcion",
             payload.get("description", "Sin descripción"),
