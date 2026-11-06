@@ -25,6 +25,7 @@ async function actualizarSimulacion() {
 
         //const coches = data.coches;
         //const alertasProximidad = data.alertas_proximidad;
+        const coches = data.coches || {};
         const alertasCloud = data.alertas_cloud || [];
         ////////////////////////////////////////////
 
