@@ -23,8 +23,10 @@ async function actualizarSimulacion() {
         const res = await fetch('/api/data');
         const data = await res.json();
 
-        const coches = data.coches;
-        const alertasProximidad = data.alertas_proximidad;
+        //const coches = data.coches;
+        //const alertasProximidad = data.alertas_proximidad;
+        const alertasCloud = data.alertas_cloud || [];
+        ////////////////////////////////////////////
 
         const carrilIda = document.getElementById('carril-ida');
         const carrilVuelta = document.getElementById('carril-vuelta');
@@ -33,15 +35,20 @@ async function actualizarSimulacion() {
         const listaAvisos = document.getElementById('lista-avisos');
 
         // Avisos de proximidad
-        if (alertasProximidad.length > 0) {
+        if (alertasCloud.length > 0) {
             panelAvisos.style.display = 'block';
-
-            listaAvisos.innerHTML = alertasProximidad.map(avisos => `
+        
+            listaAvisos.innerHTML = alertasCloud.map(alerta => `
                 <li>
-                    <strong>${avisos.coche1}</strong> y <strong>${avisos.coche2}</strong>
-                    están a <strong>${avisos.distancia} m</strong>
+                    <strong>${alerta.event_type}</strong>
+                    · Vehículo: <strong>${alerta.source_id}</strong>
+                    · RSU: <strong>${alerta.rsu_id}</strong>
+                    ${alerta.x !== null && alerta.x !== undefined
+                        ? `· Posición del evento: <strong>${alerta.x} m</strong>`
+                        : ''}
                     <span class="aviso-tipo">
-                        ${avisos.mismo_sentido ? 'Mismo sentido' : 'Sentidos opuestos'}
+                        ${alerta.descripcion}
+                        · ${alerta.timestamp}
                     </span>
                 </li>
             `).join('');
