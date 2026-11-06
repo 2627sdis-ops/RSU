@@ -11,7 +11,7 @@ COPY app/ /app/
 
 # Variable de entorno por defecto
 EXPOSE 5000
-EXPOSE 8443
+#EXPOSE 8443
 
 
 # Comando de inicio del servidor V2X-SERVICE
