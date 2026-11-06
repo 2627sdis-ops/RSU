@@ -26,6 +26,7 @@ MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 RSU_ID = os.getenv("RSU_ID", "RSU_1")
 
 SNS_HTTP_PORT = int(os.getenv("SNS_HTTP_PORT", "8443"))
+SNS_TOPIC_ARN = os.getenv("SNS_TOPIC_ARN", "")
 
 sqs = boto3.client("sqs", region_name=AWS_REGION)
 QUEUE_URL = None
@@ -335,6 +336,15 @@ class ManejadorSNS(BaseHTTPRequestHandler):
         self.send_response(codigo)
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+    def do_GET(self):
+        ruta = urlsplit(self.path).path
+
+        if ruta == "/health":
+            self._responder(200)
+            return
+
+        self._responder(404)
 
     def do_POST(self):
         global cliente_mqtt_global
