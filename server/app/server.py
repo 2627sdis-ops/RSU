@@ -228,18 +228,19 @@ class ServidorHTTPNativo(BaseHTTPRequestHandler):
     def do_GET(self):
         ruta = urlsplit(self.path).path
 
-        if ruta in ("/api/data", "/api/coches"):
+        #if ruta in ("/api/data", "/api/coches"):
             # respuesta = {
             #    "coches": estado_coches,
             #    "alertas_proximidad": alertas_proximidad_activas,
             #}
-             with alertas_cloud_lock:
+        if ruta in ("/api/data", "/api/coches"):
+            with alertas_cloud_lock:
                 alertas_cloud = list(alertas_cloud_activas)
-            
+
             respuesta = {
                 "alertas_cloud": alertas_cloud,
             }
-          
+
             contenido = json.dumps(respuesta, ensure_ascii=False).encode("utf-8")
             self._responder(200, contenido, "application/json; charset=utf-8")
             return
