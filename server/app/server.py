@@ -139,6 +139,8 @@ def consumidor_sqs(queue_url):
                             f"{event_type}"
                         )
                         
+                        #publicar_evento_sns(cuerpo)
+                        registrar_alerta_cloud(cuerpo)
                         publicar_evento_sns(cuerpo)
                  
                         #source_id = cuerpo.get("source_id")
@@ -227,10 +229,17 @@ class ServidorHTTPNativo(BaseHTTPRequestHandler):
         ruta = urlsplit(self.path).path
 
         if ruta in ("/api/data", "/api/coches"):
+            # respuesta = {
+            #    "coches": estado_coches,
+            #    "alertas_proximidad": alertas_proximidad_activas,
+            #}
+             with alertas_cloud_lock:
+                alertas_cloud = list(alertas_cloud_activas)
+            
             respuesta = {
-                "coches": estado_coches,
-                "alertas_proximidad": alertas_proximidad_activas,
+                "alertas_cloud": alertas_cloud,
             }
+          
             contenido = json.dumps(respuesta, ensure_ascii=False).encode("utf-8")
             self._responder(200, contenido, "application/json; charset=utf-8")
             return
