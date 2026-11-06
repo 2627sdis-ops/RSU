@@ -99,26 +99,43 @@ def consumidor_sqs(queue_url):
                 for mensaje in response["Messages"]:
                     try:
                         cuerpo = json.loads(mensaje["Body"])
-                        source_id = cuerpo.get("source_id")
+                        event_type = cuerpo.get("event_type", "position")
 
-                        if source_id:
-                            location = cuerpo.get("location", {})
-                            payload = cuerpo.get("payload", {})
-                            event_type = cuerpo.get("event_type", "position")
+                        # El Cloud no recibe ni procesa telemetría periódica.
+                        if event_type == "position":
+                            print(
+                                f"Telemetría descartada en Cloud: "
+                                f"{cuerpo.get('source_id')}"
+                            )
+                            continue
+                        
+                        print(
+                            f"☁️ Evento recibido desde {cuerpo.get('rsu_id', 'RSU desconocida')}: "
+                            f"{event_type}"
+                        )
+                        
+                        publicar_evento_sns(cuerpo)
+                 
+                        #source_id = cuerpo.get("source_id")
 
-                            if event_type != "position":
-                                print(f" NUEVO EVENTO [{event_type.upper()}]: Vehiculo {source_id} en X={location.get('x', 0.0)}m")
+                        #if source_id:
+                        #    location = cuerpo.get("location", {})
+                        #    payload = cuerpo.get("payload", {})
+                        #    event_type = cuerpo.get("event_type", "position")
 
-                            estado_coches[source_id] = {
-                                "source_id": source_id,
-                                "x": location.get("x", 0.0),
-                                "speed": payload.get("speed", 0.0),
-                                "direction": payload.get("direction", "ida"),
-                                "hazard": payload.get("hazard", False),
-                                "event_type": event_type,
-                                "last_update": datetime.now().strftime("%H:%M:%S"),
-                                "alerta_proximidad": False,
-                            }
+                        #    if event_type != "position":
+                        #        print(f" NUEVO EVENTO [{event_type.upper()}]: Vehiculo {source_id} en X={location.get('x', 0.0)}m")
+
+                        #    estado_coches[source_id] = {
+                        #        "source_id": source_id,
+                        #        "x": location.get("x", 0.0),
+                        #        "speed": payload.get("speed", 0.0),
+                        #        "direction": payload.get("direction", "ida"),
+                        #        "hazard": payload.get("hazard", False),
+                        #        "event_type": event_type,
+                        #        "last_update": datetime.now().strftime("%H:%M:%S"),
+                        #        "alerta_proximidad": False,
+                        #    }
 
                     except Exception as error:
                         print(f"Error procesando mensaje: {error}")
@@ -132,7 +149,7 @@ def consumidor_sqs(queue_url):
                         except Exception as error:
                             print(f"Error borrando mensaje de SQS: {error}")
 
-                verificar_proximidad()
+                #verificar_proximidad()
 
         except Exception as error:
             print(f"Error en recepcion SQS: {error}")
@@ -141,33 +158,34 @@ def consumidor_sqs(queue_url):
 
 
 ########################################### Nuevo
-def publicar_alertas_sns(alertas):
-    if not alertas:
-        return
-
+def publicar_evento_sns(evento):
     mensaje = {
-        "tipo": "alerta_proximidad",
+        "tipo": "evento_cloud",
         "timestamp": datetime.now().isoformat(),
-        "alertas": alertas,
-        "coches": estado_coches
+        "evento": evento,
     }
 
     try:
         respuesta = sns.publish(
             TopicArn=SNS_TOPIC_ARN,
             Message=json.dumps(mensaje, ensure_ascii=False),
-            Subject="AlertaProximidadV2X",
+            Subject=f"Evento V2X: {evento.get('event_type', 'desconocido')}",
             MessageAttributes={
                 "event_type": {
                     "DataType": "String",
-                    "StringValue": "proximity_alert"
+                    "StringValue": evento.get("event_type", "unknown"),
                 }
             }
         )
-        print(f" Alerta publicada en SNS: {respuesta['MessageId']}", flush=True)
+
+        print(
+            f"Evento '{evento.get('event_type')}' publicado en SNS: "
+            f"{respuesta['MessageId']}",
+            flush=True,
+        )
 
     except Exception as error:
-        print(f"Error publicando en SNS: {error}", flush=True)
+        print(f"Error publicando evento en SNS: {error}", flush=True)
 ###################################################
 
 class ServidorHTTPNativo(BaseHTTPRequestHandler):
