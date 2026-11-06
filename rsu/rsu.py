@@ -389,10 +389,11 @@ class ManejadorSNS(BaseHTTPRequestHandler):
                     flush=True,
                 )
 
-                if mensaje_cloud.get("tipo") == "alerta_proximidad":
-                    reenviar_alerta_cloud_por_mqtt(
-                        cliente_mqtt_global,
-                        mensaje_cloud,
+                if mensaje_cloud.get("tipo") == "evento_cloud":
+                    print(
+                        f"[{RSU_ID}] Evento Cloud recibido: "
+                        f"{mensaje_cloud.get('evento')}",
+                        flush=True,
                     )
 
                 self._responder()
