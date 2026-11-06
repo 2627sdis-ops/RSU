@@ -26,6 +26,9 @@ MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 RSU_ID = os.getenv("RSU_ID", "RSU_1")
 
 SNS_HTTP_PORT = int(os.getenv("SNS_HTTP_PORT", "8443"))
+RSU_DASHBOARD_PORT = int(
+    os.getenv("RSU_DASHBOARD_PORT", "5001")
+)
 SNS_TOPIC_ARN = os.getenv("SNS_TOPIC_ARN", "")
 
 sqs = boto3.client("sqs", region_name=AWS_REGION)
@@ -47,6 +50,7 @@ stop_event = threading.Event()
 
 cliente_mqtt_global = None
 
+RSU_DASHBOARD_PORT = int(os.getenv("RSU_DASHBOARD_PORT", "5001"))
 
 # ============================================================
 # ENVÍO DE EVENTOS A SQS
@@ -411,7 +415,60 @@ class ManejadorSNS(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
 
+class ManejadorDashboardRSU(BaseHTTPRequestHandler):
+    def _responder_json(self, codigo, datos):
+        contenido = json.dumps(
+            datos,
+            ensure_ascii=False,
+        ).encode("utf-8")
 
+        self.send_response(codigo)
+        self.send_header(
+            "Content-Type",
+            "application/json; charset=utf-8",
+        )
+        self.send_header("Content-Length", str(len(contenido)))
+        self.end_headers()
+        self.wfile.write(contenido)
+
+    def do_GET(self):
+        ruta = urlsplit(self.path).path
+
+        if ruta == "/api/data":
+            with estado_lock:
+                respuesta = {
+                    "rsu_id": RSU_ID,
+                    "coches": estado_coches.copy(),
+                    "alertas_proximidad": list(
+                        alertas_proximidad_activas
+                    ),
+                }
+
+            self._responder_json(200, respuesta)
+            return
+
+        self._responder_json(
+            404,
+            {"error": "Ruta no encontrada"},
+        )
+
+    def log_message(self, format, *args):
+        return
+
+def iniciar_dashboard_rsu():
+    servidor = ThreadingHTTPServer(
+        ("0.0.0.0", RSU_DASHBOARD_PORT),
+        ManejadorDashboardRSU,
+    )
+
+    print(
+        f"[{RSU_ID}] Dashboard Edge escuchando en "
+        f"puerto {RSU_DASHBOARD_PORT}",
+        flush=True,
+    )
+
+    servidor.serve_forever()
+        
 def iniciar_servidor_sns():
     servidor = ThreadingHTTPServer(
         ("0.0.0.0", SNS_HTTP_PORT),
@@ -533,6 +590,12 @@ def main():
         )
         hilo_sns.start()
 
+        hilo_dashboard = threading.Thread(
+            target=iniciar_dashboard_rsu,
+            daemon=True,
+        )
+        hilo_dashboard.start()
+        
         hilo_watchdog = threading.Thread(
             target=hilo_limpieza,
             args=(cliente_mqtt,),
