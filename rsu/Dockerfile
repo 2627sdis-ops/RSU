@@ -24,6 +24,7 @@ RUN chmod +x start.sh
 
 # Exponer el puerto MQTT estándar
 EXPOSE 1883
+EXPOSE 8443
 
 # Arrancar el contenedor usando el script
 CMD ["./start.sh"]
