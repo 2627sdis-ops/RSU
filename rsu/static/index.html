@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor RSU</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/app.js" defer></script>
+</head>
+<body>
+    <header class="cabecera">
+        <div class="cabecera-marca">
+            <span class="cabecera-punto" aria-hidden="true"></span>
+            <span class="cabecera-etiqueta">V2X Edge</span>
+        </div>
+        <h1 id="titulo-rsu">Monitor de RSU</h1>
+        <p class="cabecera-subtitulo">
+            Mensajes recibidos en tiempo real por esta unidad de carretera
+        </p>
+    </header>
+
+    <main class="paneles-mensajes">
+        <section class="panel-mensajes" aria-labelledby="titulo-vehiculos">
+            <div class="panel-cabecera">
+                <span class="panel-icono" aria-hidden="true">🚗</span>
+                <div>
+                    <h2 id="titulo-vehiculos">Mensajes de los coches</h2>
+                    <p>Telemetría y avisos recibidos por MQTT.</p>
+                </div>
+            </div>
+            <p id="vacio-vehiculos" class="vacio">Aún no se han recibido mensajes.</p>
+            <ul id="lista-vehiculos" class="lista-mensajes"></ul>
+        </section>
+
+        <section class="panel-mensajes" aria-labelledby="titulo-cloud">
+            <div class="panel-cabecera">
+                <span class="panel-icono" aria-hidden="true">☁</span>
+                <div>
+                    <h2 id="titulo-cloud">Mensajes del cloud</h2>
+                    <p>Notificaciones recibidas desde SNS.</p>
+                </div>
+            </div>
+            <p id="vacio-cloud" class="vacio">Aún no se han recibido mensajes.</p>
+            <ul id="lista-cloud" class="lista-mensajes"></ul>
+        </section>
+    </main>
+</body>
+</html>
