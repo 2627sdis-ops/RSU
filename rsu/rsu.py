@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import urlopen
 
@@ -30,6 +31,8 @@ RSU_DASHBOARD_PORT = int(
     os.getenv("RSU_DASHBOARD_PORT", "5001")
 )
 SNS_TOPIC_ARN = os.getenv("SNS_TOPIC_ARN", "")
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
 
 sqs = boto3.client("sqs", region_name=AWS_REGION)
 QUEUE_URL = None
@@ -38,12 +41,15 @@ DISTANCIA_ALERTA_M = 100.0
 DISTANCIA_REARME_M = 150.0
 TIMEOUT_VEHICULO_S = 10.0
 INTERVALO_LIMPIEZA_S = 1.0
+MAX_MENSAJES_DASHBOARD = 50
 
 cola_eventos = queue.Queue(maxsize=10000)
 
 estado_coches = {}
 alertas_proximidad_activas = []
 PAREJAS_NOTIFICADAS = set()
+mensajes_vehiculos = []
+mensajes_cloud = []
 
 estado_lock = threading.Lock()
 stop_event = threading.Event()
@@ -142,6 +148,32 @@ def actualizar_estado_coche(event_data: dict):
             "last_seen": ahora,
             "alerta_proximidad": False,
         }
+
+
+def registrar_mensaje(destino: list, mensaje: dict):
+    """Conserva los últimos mensajes recibidos para el dashboard de la RSU."""
+    evento = mensaje.get("evento", mensaje)
+    if not isinstance(evento, dict):
+        evento = {}
+
+    payload = evento.get("payload") or {}
+    if not isinstance(payload, dict):
+        payload = {}
+
+    registro = {
+        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "source_id": evento.get("source_id", "Cloud"),
+        "event_type": evento.get("event_type", mensaje.get("tipo", "desconocido")),
+        "descripcion": payload.get(
+            "descripcion", payload.get("description", "Sin descripción")
+        ),
+        # Se mantiene el mensaje completo para poder inspeccionarlo desde la UI.
+        "contenido": mensaje,
+    }
+
+    with estado_lock:
+        destino.insert(0, registro)
+        del destino[MAX_MENSAJES_DASHBOARD:]
 
 
 # ============================================================
@@ -387,6 +419,8 @@ class ManejadorSNS(BaseHTTPRequestHandler):
                     mensaje_sns.get("Message", "{}")
                 )
 
+                registrar_mensaje(mensajes_cloud, mensaje_cloud)
+
                 print(
                     f"[{RSU_ID}] Respuesta del cloud recibida por SNS: "
                     f"{mensaje_cloud}",
@@ -416,6 +450,19 @@ class ManejadorSNS(BaseHTTPRequestHandler):
         return
 
 class ManejadorDashboardRSU(BaseHTTPRequestHandler):
+    def _responder_archivo(self, archivo, content_type):
+        try:
+            contenido = archivo.read_bytes()
+        except FileNotFoundError:
+            self._responder_json(404, {"error": "Recurso no encontrado"})
+            return
+
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(contenido)))
+        self.end_headers()
+        self.wfile.write(contenido)
+
     def _responder_json(self, codigo, datos):
         contenido = json.dumps(
             datos,
@@ -442,9 +489,22 @@ class ManejadorDashboardRSU(BaseHTTPRequestHandler):
                     "alertas_proximidad": list(
                         alertas_proximidad_activas
                     ),
+                    "mensajes_vehiculos": list(mensajes_vehiculos),
+                    "mensajes_cloud": list(mensajes_cloud),
                 }
 
             self._responder_json(200, respuesta)
+            return
+
+        recursos = {
+            "/": (STATIC_DIR / "index.html", "text/html; charset=utf-8"),
+            "/index.html": (STATIC_DIR / "index.html", "text/html; charset=utf-8"),
+            "/static/css/style.css": (STATIC_DIR / "css" / "style.css", "text/css; charset=utf-8"),
+            "/static/js/app.js": (STATIC_DIR / "js" / "app.js", "application/javascript; charset=utf-8"),
+        }
+        if ruta in recursos:
+            archivo, content_type = recursos[ruta]
+            self._responder_archivo(archivo, content_type)
             return
 
         self._responder_json(
@@ -514,6 +574,7 @@ def on_message(client, userdata, msg):
         payload_str = msg.payload.decode("utf-8")
         event_data = json.loads(payload_str)
 
+        registrar_mensaje(mensajes_vehiculos, event_data)
         actualizar_estado_coche(event_data)
         verificar_proximidad(client)
 
