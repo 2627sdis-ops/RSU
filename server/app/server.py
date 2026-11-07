@@ -7,7 +7,7 @@ import os
 import threading
 import time
  
-import boto3
+import boto3 
 
 
 # Configuracion: de AWS y la cola sqs.
@@ -104,6 +104,16 @@ def registrar_alerta_cloud(evento: dict):
     }
 
     with alertas_cloud_lock:
+        # La vista del cloud representa el estado actual de cada vehículo, no
+        # su historial. Si el mismo coche vuelve a avisar, se elimina su aviso
+        # anterior antes de guardar el nuevo al principio de la lista.
+        source_id = evento.get("source_id")
+        if source_id:
+            alertas_cloud_activas[:] = [
+                alerta_anterior
+                for alerta_anterior in alertas_cloud_activas
+                if alerta_anterior["source_id"] != source_id
+            ]
         alertas_cloud_activas.insert(0, alerta)
         del alertas_cloud_activas[MAX_ALERTAS_CLOUD:]
 ##################################################################################################################
@@ -293,3 +303,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
