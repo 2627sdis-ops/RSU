@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Outfit:wght@300;400;500;600&display=swap');
+
+:root {
+    --verde: #99d75b;
+    --verde-oscuro: #46731c;
+    --marron: #784717;
+    --texto: #241a10;
+    --texto-suave: #5c5347;
+    --fondo-panel: rgba(245, 245, 244, .82);
+}
+
+* { box-sizing: border-box; }
+
+body {
+    min-height: 100vh;
+    margin: 0;
+    padding: 32px;
+    color: var(--texto);
+    font-family: Outfit, "Segoe UI", sans-serif;
+    background: linear-gradient(135deg, #a6d068, var(--verde), #86b94a);
+}
+
+.cabecera, .paneles-mensajes { max-width: 1200px; margin-inline: auto; }
+.cabecera { text-align: center; }
+h1, h2 { margin: 0; color: var(--marron); font-family: Fraunces, Georgia, serif; }
+h1 { margin: 12px 0; font-size: clamp(1.8rem, 4vw, 3rem); }
+.cabecera-subtitulo, .panel-cabecera p { margin: 0; color: var(--texto-suave); }
+.cabecera-marca {
+    display: inline-flex; gap: 9px; align-items: center; padding: 6px 14px;
+    border: 1px solid rgba(120, 71, 23, .2); border-radius: 999px;
+    background: rgba(245, 245, 244, .55); color: var(--marron);
+    font-size: .76rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+}
+.cabecera-punto { width: 8px; height: 8px; border-radius: 50%; background: var(--verde-oscuro); }
+
+.paneles-mensajes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-top: 32px; }
+.panel-mensajes {
+    min-height: 360px; padding: 24px; border: 1px solid rgba(255, 255, 255, .7);
+    border-radius: 24px; background: var(--fondo-panel); box-shadow: 0 10px 30px rgba(36, 26, 16, .12);
+}
+.panel-cabecera { display: flex; gap: 14px; align-items: flex-start; }
+.panel-icono { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 12px; background: rgba(153, 215, 91, .35); font-size: 1.4rem; }
+.vacio { margin-top: 28px; color: var(--texto-suave); font-style: italic; }
+.lista-mensajes { display: grid; gap: 12px; margin: 20px 0 0; padding: 0; list-style: none; }
+.mensaje { padding: 14px; border-left: 3px solid var(--verde-oscuro); border-radius: 12px; background: rgba(255, 255, 255, .8); }
+.mensaje-cabecera { color: var(--marron); font-weight: 600; }
+.mensaje p { margin: 4px 0; }
+.mensaje time { color: var(--texto-suave); font-size: .8rem; }
+.mensaje pre { max-height: 140px; margin: 10px 0 0; overflow: auto; padding: 10px; border-radius: 8px; background: rgba(120, 71, 23, .07); font: .72rem/1.35 ui-monospace, monospace; white-space: pre-wrap; }
+
+@media (max-width: 760px) { body { padding: 20px 14px; } .paneles-mensajes { grid-template-columns: 1fr; } }
