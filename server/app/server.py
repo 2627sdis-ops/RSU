@@ -7,7 +7,7 @@ import os
 import threading
 import time
  
-import boto3 
+import boto3
 
 
 # Configuracion: de AWS y la cola sqs.
@@ -303,7 +303,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
