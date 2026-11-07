@@ -18,12 +18,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar el código del RSU y el script de inicio
 COPY rsu.py .
 COPY start.sh .
+COPY static/ ./static/
 
 # Dar permisos de ejecución al script
 RUN chmod +x start.sh
 
 # Exponer el puerto MQTT estándar
 EXPOSE 1883
+EXPOSE 8443
+EXPOSE 5001
+
+# Arrancar el contenedor usando el script
+CMD ["./start.sh"]
+
 EXPOSE 8443
 
 # Arrancar el contenedor usando el script
