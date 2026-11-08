@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -8,7 +8,7 @@ import json
 import os
 import threading
 import time
-  
+import uuid
 import boto3
 
 # Configuracion: de AWS y la cola sqs.
@@ -397,13 +397,21 @@ class ServidorHTTPNativo(BaseHTTPRequestHandler):
 
 
 def main():
-    # La consulta a AWS se realiza al arrancar.
+    # 1. Inicializar DynamoDB y precargar historial
+    try:
+        asegurar_tabla_dynamodb()
+        cargar_alertas_recientes_dynamodb()
+    except Exception as e:
+        print(f"Advertencia DynamoDB en inicio: {e}", flush=True)
+
+    # 2. Conectar a SQS e iniciar hilo consumidor
     respuesta_url = sqs.get_queue_url(QueueName=SQS_QUEUE_NAME)
     queue_url = respuesta_url["QueueUrl"]
 
     hilo_sqs = threading.Thread(target=consumidor_sqs, args=(queue_url,), daemon=True)
     hilo_sqs.start()
 
+    # 3. Iniciar servidor web HTTP del Cloud
     httpd = HTTPServer(("", PORT), ServidorHTTPNativo)
     print(f" Servidor V2X con control de proximidad iniciado en: http://localhost:{PORT}\n")
 
