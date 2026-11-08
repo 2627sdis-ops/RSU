@@ -352,8 +352,8 @@ def reenviar_alerta_cloud_por_mqtt(cliente, mensaje_cloud):
         print(f"[{RSU_ID}] MQTT aún no está conectado.")
         return
 
+    # Caso 1: Array de alertas de proximidad
     alertas = mensaje_cloud.get("alertas", [])
-
     for alerta in alertas:
         enviar_alerta_proximidad(
             cliente,
@@ -366,6 +366,28 @@ def reenviar_alerta_cloud_por_mqtt(cliente, mensaje_cloud):
             list(estado_coches.keys()),
         )
 
+    # Caso 2: Evento individual de tipo 'evento_cloud' (obras, accidente, etc.)
+    if mensaje_cloud.get("tipo") == "evento_cloud":
+        evento = mensaje_cloud.get("evento", {})
+        payload_evento = evento.get("payload", {})
+        alerta_evento = {
+            "message_type": "alert",
+            "event_type": evento.get("event_type", "alerta_cloud"),
+            "alert_id": evento.get("event_id", f"cloud-{uuid.uuid4().hex[:8]}"),
+            "event_time": datetime.now(timezone.utc).isoformat(),
+            "rsu_id": RSU_ID,
+            "origen_rsu": evento.get("rsu_id", "desconocida"),
+            "source_id": evento.get("source_id", "Cloud"),
+            "posicion_x": (evento.get("location") or {}).get("x"),
+            "descripcion": payload_evento.get("descripcion", payload_evento.get("description", "Aviso de tráfico")),
+        }
+        alerta_json = json.dumps(alerta_evento)
+        with estado_lock:
+            vehiculos_destinatarios = list(estado_coches.keys())
+
+        for vid in vehiculos_destinatarios:
+            cliente.publish(f"vehiculos/{vid}/alertas", alerta_json, qos=1)
+            print(f"[{RSU_ID}] Alerta Cloud enviada a {vid}: {alerta_evento['event_type']}", flush=True)
 
 class ManejadorSNS(BaseHTTPRequestHandler):
     def _responder(self, codigo=200):
@@ -414,26 +436,27 @@ class ManejadorSNS(BaseHTTPRequestHandler):
                 self._responder()
                 return
 
-            if tipo == "Notification":
+           if tipo == "Notification":
                 mensaje_cloud = json.loads(
                     mensaje_sns.get("Message", "{}")
                 )
-
                 registrar_mensaje(mensajes_cloud, mensaje_cloud)
-
                 print(
                     f"[{RSU_ID}] Respuesta del cloud recibida por SNS: "
                     f"{mensaje_cloud}",
                     flush=True,
                 )
-
                 if mensaje_cloud.get("tipo") == "evento_cloud":
+                    evento = mensaje_cloud.get("evento", {})
                     print(
-                        f"[{RSU_ID}] Evento Cloud recibido: "
-                        f"{mensaje_cloud.get('evento')}",
+                        f"[{RSU_ID}] Evento Cloud recibido: {evento}",
                         flush=True,
                     )
-
+                # Reenviar la alerta a los vehículos conectados vía MQTT
+                try:
+                    reenviar_alerta_cloud_por_mqtt(cliente_mqtt_global, mensaje_cloud)
+                except Exception as err_mqtt:
+                    print(f"[{RSU_ID}] Error al reenviar alerta a coches por MQTT: {err_mqtt}", flush=True)
                 self._responder()
                 return
 
