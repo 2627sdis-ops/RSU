@@ -70,6 +70,17 @@ def asegurar_tabla_dynamodb():
         else:
             print(f"Error verificando tabla DynamoDB: {e}")
 
+def borrar_eventos_dynamodb():
+    respuesta = tabla_eventos.scan(
+        ProjectionExpression="event_id"
+    )
+
+    with tabla_eventos.batch_writer() as batch:
+        for item in respuesta.get("Items", []):
+            batch.delete_item(Key={"event_id": item["event_id"]})
+
+    print("Eventos anteriores eliminados de DynamoDB.")
+
 def float_a_decimal(obj):
     """Convierte floats a Decimal para compatibilidad con DynamoDB."""
     if isinstance(obj, float):
@@ -214,6 +225,7 @@ def registrar_alerta_cloud(evento: dict):
                 if alerta_anterior["source_id"] != source_id
             ]
         alertas_cloud_activas.insert(0, alerta)
+       
         del alertas_cloud_activas[MAX_ALERTAS_CLOUD:]
 ##################################################################################################################
 
@@ -359,15 +371,57 @@ class ServidorHTTPNativo(BaseHTTPRequestHandler):
       ###########################################################3
         if ruta == "/api/historial":
             try:
+                items = []
+                scan_kwargs = {}
                 resp = tabla_eventos.scan(Limit=100)
-                items = resp.get("Items", [])
-                # Convertir Decimals a int/float para serialización JSON estándar
-                items_json = json.loads(json.dumps(items, default=lambda o: float(o) if isinstance(o, Decimal) else str(o)))
-                contenido = json.dumps({"eventos": items_json}, ensure_ascii=False).encode("utf-8")
-                self._responder(200, contenido, "application/json; charset=utf-8")
+                
+                # scan es paginado: así se recuperan todos los eventos.
+                while True:
+                    resp = tabla_eventos.scan(**scan_kwargs)
+                    items.extend(resp.get("Items", []))
+        
+                    last_key = resp.get("LastEvaluatedKey")
+                    if not last_key:
+                        break
+        
+                    scan_kwargs["ExclusiveStartKey"] = last_key
+        
+                # Más recientes primero.
+                items.sort(
+                    key=lambda item: item.get("timestamp", ""),
+                    reverse=True,
+                )
+        
+                items_json = json.loads(
+                    json.dumps(
+                        items,
+                        default=lambda value: (
+                            float(value)
+                            if isinstance(value, Decimal)
+                            else str(value)
+                        ),
+                    )
+                )
+        
+                contenido = json.dumps(
+                    {"eventos": items_json},
+                    ensure_ascii=False,
+                ).encode("utf-8")
+        
+                self._responder(
+                    200,
+                    contenido,
+                    "application/json; charset=utf-8",
+                )
+                return
+        
             except Exception as e:
-                self._responder(500, json.dumps({"error": str(e)}).encode("utf-8"), "application/json")
-            return
+                self._responder(
+                    500,
+                    json.dumps({"error": str(e)}).encode("utf-8"),
+                    "application/json",
+                )
+                return
 ###############################################################################
       
         if ruta in ("/", "/index.html"):
@@ -400,7 +454,8 @@ def main():
     # 1. Inicializar DynamoDB y precargar historial
     try:
         asegurar_tabla_dynamodb()
-        cargar_alertas_recientes_dynamodb()
+        #borrar_eventos_dynamodb()
+        #cargar_alertas_recientes_dynamodb()
     except Exception as e:
         print(f"Advertencia DynamoDB en inicio: {e}", flush=True)
 
