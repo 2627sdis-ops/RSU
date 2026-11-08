@@ -567,10 +567,21 @@ def iniciar_servidor_sns():
     servidor.serve_forever()
 
 
-# Sólo los eventos distintos de "position" viajarán al Cloud.
-# Ejemplos: obra, accidente, carretera_cortada, emergencia...
+
+EVENTOS_SOLO_EDGE = {
+    "frenada_brusca",
+    "aquaplaning",
+}
+
 def debe_enviar_a_cloud(event_data: dict) -> bool:
-    return event_data.get("event_type", "position") != "position"
+    event_type = event_data.get("event_type", "position")
+
+    # La telemetría normal y estas incidencias se quedan en el edge.
+    if event_type == "position" or event_type in EVENTOS_SOLO_EDGE:
+        return False
+
+    # accidente, obras, bache y coche_averiado irán al cloud.
+    return True
 
 # ============================================================
 # MQTT
