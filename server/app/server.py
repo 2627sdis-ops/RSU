@@ -2,13 +2,14 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
+from decimal import Decimal
+from botocore.exceptions import ClientError
 import json
 import os
 import threading
 import time
   
 import boto3
-
 
 # Configuracion: de AWS y la cola sqs.
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
@@ -38,6 +39,104 @@ MAX_ALERTAS_CLOUD = 50
 
 alertas_cloud_activas = []
 alertas_cloud_lock = threading.Lock()
+
+################################################################3333
+
+
+DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "v2x_eventos")
+dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+tabla_eventos = dynamodb.Table(DYNAMODB_TABLE_NAME)
+
+def asegurar_tabla_dynamodb():
+    """Crea la tabla en DynamoDB si no existe todavía."""
+    try:
+        tabla_eventos.load()
+        print(f"Tabla DynamoDB '{DYNAMODB_TABLE_NAME}' lista.")
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ResourceNotFoundException":
+            print(f"Creando tabla DynamoDB '{DYNAMODB_TABLE_NAME}'...")
+            tabla = dynamodb.create_table(
+                TableName=DYNAMODB_TABLE_NAME,
+                KeySchema=[
+                    {"AttributeName": "event_id", "KeyType": "HASH"},
+                ],
+                AttributeDefinitions=[
+                    {"AttributeName": "event_id", "AttributeType": "S"},
+                ],
+                BillingMode="PAY_PER_REQUEST",
+            )
+            tabla.wait_until_exists()
+            print(f"Tabla '{DYNAMODB_TABLE_NAME}' creada con éxito.")
+        else:
+            print(f"Error verificando tabla DynamoDB: {e}")
+
+def float_a_decimal(obj):
+    """Convierte floats a Decimal para compatibilidad con DynamoDB."""
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    if isinstance(obj, dict):
+        return {k: float_a_decimal(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [float_a_decimal(v) for v in obj]
+    return obj
+
+def guardar_evento_dynamodb(evento: dict):
+    """Guarda un evento procesado en la tabla de DynamoDB."""
+    location = evento.get("location") or {}
+    payload = evento.get("payload") or {}
+
+    item = {
+        "event_id": str(evento.get("event_id") or f"evt-{uuid.uuid4().hex[:12]}"),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "event_type": str(evento.get("event_type", "desconocido")),
+        "source_id": str(evento.get("source_id", "desconocido")),
+        "rsu_id": str(evento.get("rsu_id", "desconocida")),
+        "x": float_a_decimal(location.get("x", 0.0)),
+        "speed": float_a_decimal(payload.get("speed", 0.0)),
+        "direction": str(payload.get("direction", "ida")),
+        "descripcion": str(
+            payload.get("descripcion", payload.get("description", "Sin descripción"))
+        ),
+        "payload": float_a_decimal(payload),
+    }
+
+    try:
+        tabla_eventos.put_item(Item=item)
+        print(f"Evento {item['event_id']} guardado en DynamoDB.", flush=True)
+    except Exception as error:
+        print(f"Error guardando evento en DynamoDB: {error}", flush=True)
+
+def cargar_alertas_recientes_dynamodb(limite=50):
+    """Carga los últimos eventos de DynamoDB al iniciar el servidor."""
+    try:
+        respuesta = tabla_eventos.scan(Limit=limite)
+        items = respuesta.get("Items", [])
+        # Ordenar por timestamp descendente
+        items.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        with alertas_cloud_lock:
+            for item in items:
+                alertas_cloud_activas.append({
+                    "event_id": item.get("event_id"),
+                    "event_type": item.get("event_type"),
+                    "source_id": item.get("source_id"),
+                    "rsu_id": item.get("rsu_id"),
+                    "x": float(item.get("x", 0.0)) if item.get("x") is not None else None,
+                    "direction": item.get("direction", "ida"),
+                    "descripcion": item.get("descripcion", ""),
+                    "timestamp": item.get("timestamp", "")[:19].replace("T", " "),
+                })
+        print(f"Se cargaron {len(items)} eventos históricos desde DynamoDB.")
+    except Exception as e:
+        print(f"No se pudieron cargar eventos históricos de DynamoDB: {e}")
+
+
+
+
+
+########################################################################
+
+
+
 
 def verificar_proximidad():
     # Procesado en servidor para alerta de proximidad
@@ -153,6 +252,7 @@ def consumidor_sqs(queue_url):
                         #publicar_evento_sns(cuerpo)
                         registrar_alerta_cloud(cuerpo)
                         publicar_evento_sns(cuerpo)
+                        guardar_evento_dynamodb(cuerpo)
                  
                         #source_id = cuerpo.get("source_id")
 
