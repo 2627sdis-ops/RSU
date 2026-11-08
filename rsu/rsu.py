@@ -58,6 +58,11 @@ cliente_mqtt_global = None
 
 RSU_DASHBOARD_PORT = int(os.getenv("RSU_DASHBOARD_PORT", "5001"))
 
+EVENTOS_SOLO_EDGE = {
+    "frenada_brusca",
+    "aquaplaning",
+}
+
 # ============================================================
 # ENVÍO DE EVENTOS A SQS
 # ============================================================
@@ -566,12 +571,6 @@ def iniciar_servidor_sns():
 
     servidor.serve_forever()
 
-
-
-EVENTOS_SOLO_EDGE = {
-    "frenada_brusca",
-    "aquaplaning",
-}
 
 def debe_enviar_a_cloud(event_data: dict) -> bool:
     event_type = event_data.get("event_type", "position")
