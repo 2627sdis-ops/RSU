@@ -436,7 +436,7 @@ class ManejadorSNS(BaseHTTPRequestHandler):
                 self._responder()
                 return
 
-           if tipo == "Notification":
+            if tipo == "Notification":
                 mensaje_cloud = json.loads(
                     mensaje_sns.get("Message", "{}")
                 )
