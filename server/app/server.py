@@ -356,6 +356,20 @@ class ServidorHTTPNativo(BaseHTTPRequestHandler):
             self._responder(200, contenido, "application/json; charset=utf-8")
             return
 
+      ###########################################################3
+        if ruta == "/api/historial":
+            try:
+                resp = tabla_eventos.scan(Limit=100)
+                items = resp.get("Items", [])
+                # Convertir Decimals a int/float para serialización JSON estándar
+                items_json = json.loads(json.dumps(items, default=lambda o: float(o) if isinstance(o, Decimal) else str(o)))
+                contenido = json.dumps({"eventos": items_json}, ensure_ascii=False).encode("utf-8")
+                self._responder(200, contenido, "application/json; charset=utf-8")
+            except Exception as e:
+                self._responder(500, json.dumps({"error": str(e)}).encode("utf-8"), "application/json")
+            return
+###############################################################################
+      
         if ruta in ("/", "/index.html"):
             archivo = STATIC_DIR / "index.html"
             content_type = "text/html; charset=utf-8"
