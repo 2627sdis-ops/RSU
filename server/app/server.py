@@ -140,11 +140,7 @@ def cargar_alertas_recientes_dynamodb(limite=50):
     except Exception as e:
         print(f"No se pudieron cargar eventos históricos de DynamoDB: {e}")
 
-    ##########################################################333################################################################
-    # NUEVO: enviar las alertas al topic SNS
-    publicar_alertas_sns(alertas)
-    ###############################################################################################################################33
-
+  
 def registrar_alerta_cloud(evento: dict):
     location = evento.get("location") or {}
     payload = evento.get("payload") or {}
