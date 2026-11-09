@@ -30,8 +30,3 @@ EXPOSE 5001
 
 # Arrancar el contenedor usando el script
 CMD ["./start.sh"]
-
-EXPOSE 8443
-
-# Arrancar el contenedor usando el script
-CMD ["./start.sh"]
