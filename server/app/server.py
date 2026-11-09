@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 from decimal import Decimal
@@ -457,7 +457,7 @@ def main():
     hilo_sqs.start()
 
     # 3. Iniciar servidor web HTTP del Cloud
-    httpd = HTTPServer(("", PORT), ServidorHTTPNativo)
+    httpd = ThreadingHTTPServer(("", PORT), ServidorHTTPNativo)
     print(f" Servidor V2X iniciado en: http://localhost:{PORT}\n")
 
     try:
