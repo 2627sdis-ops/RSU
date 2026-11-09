@@ -56,12 +56,15 @@ stop_event = threading.Event()
 
 cliente_mqtt_global = None
 
-RSU_DASHBOARD_PORT = int(os.getenv("RSU_DASHBOARD_PORT", "5001"))
-
+# Incidencias que se resuelven en el edge con una alerta local inmediata.
 EVENTOS_SOLO_EDGE = {
     "frenada_brusca",
     "aguaplaning",
 }
+DISTANCIA_AVISO_PELIGRO_M = 300.0
+
+# alert_id de las alertas del cloud ya reenviadas (SNS puede repetir entregas).
+alertas_cloud_vistas = set()
 
 # ============================================================
 # ENVÍO DE EVENTOS A SQS
@@ -81,9 +84,19 @@ def hilo_sqs_worker():
         exito = False
 
         while not exito and not stop_event.is_set():
+            # La URL de la cola se obtiene aquí (con reintentos) para que la
+            # RSU pueda arrancar aunque AWS no esté disponible.
             if not QUEUE_URL:
-                time.sleep(2)
-                continue
+                try:
+                    QUEUE_URL = sqs.get_queue_url(QueueName=SQS_QUEUE_NAME)["QueueUrl"]
+                    print(f"[{RSU_ID}] Conectado a SQS: {QUEUE_URL}", flush=True)
+                except Exception as error:
+                    print(
+                        f"⚠️ [{RSU_ID}] No se pudo obtener la cola SQS. "
+                        f"Buffering activo. Reintentando en 5s... Error: {error}"
+                    )
+                    time.sleep(5)
+                    continue
 
             try:
                 event_type = event_data.get("event_type", "position")
@@ -166,11 +179,14 @@ def registrar_mensaje(destino: list, mensaje: dict):
         payload = {}
 
     registro = {
-        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
         "source_id": evento.get("source_id", "Cloud"),
-        "event_type": evento.get("event_type", mensaje.get("tipo", "desconocido")),
-        "descripcion": payload.get(
-            "descripcion", payload.get("description", "Sin descripción")
+        "event_type": mensaje.get(
+            "alert_type", evento.get("event_type", mensaje.get("tipo", "desconocido"))
+        ),
+        "descripcion": mensaje.get(
+            "descripcion",
+            payload.get("descripcion", payload.get("description", "Sin descripción")),
         ),
         # Se mantiene el mensaje completo para poder inspeccionarlo desde la UI.
         "contenido": mensaje,
@@ -318,6 +334,61 @@ def verificar_proximidad(cliente):
 
 
 # ============================================================
+# ALERTA LOCAL DE FRENADA BRUSCA Y AGUAPLANING
+# ============================================================
+
+def alerta_local_peligro(cliente, event_data: dict):
+    """Avisa a los coches que se acercan al punto del peligro.
+
+    - frenada_brusca: solo a los que van detrás en el mismo sentido.
+    - aguaplaning: a los que se acercan en cualquier sentido.
+    """
+    origen = event_data.get("source_id")
+    event_type = event_data.get("event_type")
+    x0 = float((event_data.get("location") or {}).get("x", 0.0))
+    sentido = (event_data.get("payload") or {}).get("direction", "ida")
+
+    with estado_lock:
+        coches = list(estado_coches.values())
+
+    destinatarios = []
+    for coche in coches:
+        if coche["source_id"] == origen:
+            continue
+        if event_type == "frenada_brusca" and coche["direction"] != sentido:
+            continue
+
+        distancia = coche["x"] - x0
+        # En 'ida' se avanza hacia x creciente: se acerca quien está antes de x0.
+        se_acerca = (
+            (coche["direction"] == "ida" and distancia <= 0)
+            or (coche["direction"] == "vuelta" and distancia >= 0)
+        )
+        if se_acerca and abs(distancia) <= DISTANCIA_AVISO_PELIGRO_M:
+            destinatarios.append((coche["source_id"], round(abs(distancia), 1)))
+
+    for vehicle_id, distancia in destinatarios:
+        mensaje = {
+            "message_type": "alert",
+            "event_type": f"{event_type}_local",
+            "alert_id": f"local-{event_data.get('event_id')}",
+            "event_time": datetime.now(timezone.utc).isoformat(),
+            "rsu_id": RSU_ID,
+            "source_id": origen,
+            "posicion_x": x0,
+            "distancia_m": distancia,
+            "descripcion": f"{event_type} de {origen} a {distancia} m por delante",
+        }
+        cliente.publish(f"vehiculos/{vehicle_id}/alertas", json.dumps(mensaje), qos=1)
+
+    print(
+        f"🟠 [{RSU_ID}] {event_type} de {origen} en x={x0:.0f} m: "
+        f"aviso local a {len(destinatarios)} vehículos",
+        flush=True,
+    )
+
+
+# ============================================================
 # LIMPIEZA DE VEHÍCULOS INACTIVOS
 # ============================================================
 
@@ -357,34 +428,19 @@ def reenviar_alerta_cloud_por_mqtt(cliente, mensaje_cloud):
         print(f"[{RSU_ID}] MQTT aún no está conectado.")
         return
 
-    # Caso 1: Array de alertas de proximidad
-    alertas = mensaje_cloud.get("alertas", [])
-    for alerta in alertas:
-        enviar_alerta_proximidad(
-            cliente,
-            {
-                "coche1": alerta.get("coche1"),
-                "coche2": alerta.get("coche2"),
-                "distancia": alerta.get("distancia", 0.0),
-                "mismo_sentido": alerta.get("mismo_sentido", False),
-            },
-            list(estado_coches.keys()),
-        )
-
-    # Caso 2: Evento individual de tipo 'evento_cloud' (obras, accidente, etc.)
-    if mensaje_cloud.get("tipo") == "evento_cloud":
+    # Alerta generada por V2X-SERVICE (incidencia o zona peligrosa)
+    if mensaje_cloud.get("tipo") == "alerta_cloud":
         evento = mensaje_cloud.get("evento", {})
-        payload_evento = evento.get("payload", {})
         alerta_evento = {
             "message_type": "alert",
-            "event_type": evento.get("event_type", "alerta_cloud"),
-            "alert_id": evento.get("event_id", f"cloud-{uuid.uuid4().hex[:8]}"),
-            "event_time": datetime.now(timezone.utc).isoformat(),
+            "event_type": mensaje_cloud.get("alert_type", "alerta_cloud"),
+            "alert_id": mensaje_cloud.get("alert_id", f"cloud-{uuid.uuid4().hex[:8]}"),
+            "event_time": mensaje_cloud.get("timestamp", datetime.now(timezone.utc).isoformat()),
             "rsu_id": RSU_ID,
             "origen_rsu": evento.get("rsu_id", "desconocida"),
             "source_id": evento.get("source_id", "Cloud"),
             "posicion_x": (evento.get("location") or {}).get("x"),
-            "descripcion": payload_evento.get("descripcion", payload_evento.get("description", "Aviso de tráfico")),
+            "descripcion": mensaje_cloud.get("descripcion", "Aviso de tráfico"),
         }
         alerta_json = json.dumps(alerta_evento)
         with estado_lock:
@@ -445,18 +501,23 @@ class ManejadorSNS(BaseHTTPRequestHandler):
                 mensaje_cloud = json.loads(
                     mensaje_sns.get("Message", "{}")
                 )
+
+                # SNS entrega "al menos una vez": si ya se reenvió esta
+                # alerta, se ignora la repetición.
+                alert_id = mensaje_cloud.get("alert_id")
+                if alert_id in alertas_cloud_vistas:
+                    print(f"[{RSU_ID}] Alerta {alert_id} duplicada ignorada", flush=True)
+                    self._responder()
+                    return
+                if alert_id:
+                    alertas_cloud_vistas.add(alert_id)
+
                 registrar_mensaje(mensajes_cloud, mensaje_cloud)
                 print(
-                    f"[{RSU_ID}] Respuesta del cloud recibida por SNS: "
-                    f"{mensaje_cloud}",
+                    f"[{RSU_ID}] Alerta del cloud recibida por SNS: "
+                    f"{mensaje_cloud.get('alert_type')} ({alert_id})",
                     flush=True,
                 )
-                if mensaje_cloud.get("tipo") == "evento_cloud":
-                    evento = mensaje_cloud.get("evento", {})
-                    print(
-                        f"[{RSU_ID}] Evento Cloud recibido: {evento}",
-                        flush=True,
-                    )
                 # Reenviar la alerta a los vehículos conectados vía MQTT
                 try:
                     reenviar_alerta_cloud_por_mqtt(cliente_mqtt_global, mensaje_cloud)
@@ -611,7 +672,11 @@ def on_message(client, userdata, msg):
         actualizar_estado_coche(event_data)
         verificar_proximidad(client)
 
-                # La telemetría normal se procesa sólo en el edge.
+        # Frenada brusca y aguaplaning: alerta local inmediata, sin cloud.
+        if event_data.get("event_type") in EVENTOS_SOLO_EDGE:
+            alerta_local_peligro(client, event_data)
+
+        # La telemetría normal se procesa sólo en el edge.
         # Sólo eventos especiales se reenvían al Cloud por SQS.
         if debe_enviar_a_cloud(event_data):
             event_data["rsu_id"] = RSU_ID
@@ -646,24 +711,10 @@ def on_message(client, userdata, msg):
 # ============================================================
 
 def main():
-    global QUEUE_URL
     global cliente_mqtt_global
 
-    try:
-        print(
-            f"[{RSU_ID}] Obteniendo URL de la cola SQS "
-            f"'{SQS_QUEUE_NAME}'..."
-        )
-
-        respuesta = sqs.get_queue_url(QueueName=SQS_QUEUE_NAME)
-        QUEUE_URL = respuesta["QueueUrl"]
-
-        print(f"[{RSU_ID}] Conectado a SQS: {QUEUE_URL}")
-
-    except Exception as error:
-        print(f"[{RSU_ID}] Error obteniendo cola SQS: {error}")
-        return
-
+    # La cola SQS la resuelve el hilo worker (con reintentos), así la RSU
+    # arranca y da servicio local aunque AWS no esté disponible.
     cliente_mqtt = mqtt.Client(
         mqtt.CallbackAPIVersion.VERSION2,
         f"RSU_Node_{RSU_ID}",
