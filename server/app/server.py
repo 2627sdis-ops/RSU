@@ -140,56 +140,6 @@ def cargar_alertas_recientes_dynamodb(limite=50):
     except Exception as e:
         print(f"No se pudieron cargar eventos históricos de DynamoDB: {e}")
 
-
-
-
-
-########################################################################
-
-
-
-
-def verificar_proximidad():
-    # Procesado en servidor para alerta de proximidad
-    global alertas_proximidad_activas
-
-    alertas = []
-    vehiculos = list(estado_coches.values())
-
-    for vehiculo in vehiculos:
-        vehiculo["alerta_proximidad"] = False
-
-    for i in range(len(vehiculos)):
-        for j in range(i + 1, len(vehiculos)):
-            v1 = vehiculos[i]
-            v2 = vehiculos[j]
-            distancia = abs(v1["x"] - v2["x"])
-
-            if distancia < 100.0:
-                v1["alerta_proximidad"] = True
-                v2["alerta_proximidad"] = True
-
-                alertas.append({
-                    "coche1": v1["source_id"],
-                    "coche2": v2["source_id"],
-                    "distancia": round(distancia, 1),
-                    "mismo_sentido": v1["direction"] == v2["direction"],
-                })
-
-                pareja_key = tuple(sorted([v1["source_id"], v2["source_id"]]))
-                if pareja_key not in PAREJAS_NOTIFICADAS:
-                    PAREJAS_NOTIFICADAS.add(pareja_key)
-                    print(f" AVISO PROXIMIDAD: {v1['source_id']} y {v2['source_id']} estan a {distancia:.1f}m!")
-
-    # La pareja vuelve a poder generar un aviso cuando se separa mas de 150 m.
-    parejas_a_remover = set()
-    for pareja in PAREJAS_NOTIFICADAS:
-        if ( pareja[0] in estado_coches  and  pareja[1] in estado_coches  and  abs(estado_coches[pareja[0]]["x"] - estado_coches[pareja[1]]["x"]) > 150.0 ):
-            parejas_a_remover.add(pareja)
-
-    PAREJAS_NOTIFICADAS.difference_update(parejas_a_remover)
-    alertas_proximidad_activas = alertas
-
     ##########################################################333################################################################
     # NUEVO: enviar las alertas al topic SNS
     publicar_alertas_sns(alertas)
