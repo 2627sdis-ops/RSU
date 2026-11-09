@@ -147,7 +147,7 @@ def actualizar_estado_coche(event_data: dict):
                 "direction",
                 anterior.get("direction", "ida")
             ),
-            "hazard": payload.get("hazard", anterior.get("hazard", False)),
+            #"hazard": payload.get("hazard", anterior.get("hazard", False)),
             "event_type": event_data.get("event_type", "position"),
             "last_update": datetime.now().strftime("%H:%M:%S"),
             "last_seen": ahora,
