@@ -11,7 +11,7 @@ import time
 import uuid
 import boto3
 
-# Configuracion: de AWS y la cola sqs.
+# Configuracion: de AWS y la cola sqs. 
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 SQS_QUEUE_NAME = os.getenv("SQS_QUEUE_NAME", "v2x-events")
 PORT = int(os.getenv("PORT", "5000"))
