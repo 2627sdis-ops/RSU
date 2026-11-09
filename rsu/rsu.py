@@ -60,7 +60,7 @@ RSU_DASHBOARD_PORT = int(os.getenv("RSU_DASHBOARD_PORT", "5001"))
 
 EVENTOS_SOLO_EDGE = {
     "frenada_brusca",
-    "aquaplaning",
+    "aguaplaning",
 }
 
 # ============================================================
