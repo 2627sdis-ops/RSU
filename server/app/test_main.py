@@ -4,7 +4,7 @@ from pathlib import Path
 def test_ejemplo_basico():
     """Prueba unitaria básica para verificar que pytest se ejecuta."""
     assert 1 + 1 == 2
-
+ 
 
 def test_archivos_del_dashboard_existen():
     """Comprueba que los recursos que necesita el servidor están en el proyecto."""
