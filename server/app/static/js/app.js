@@ -1,4 +1,57 @@
 const LONGITUD_CARRETERA_M = 5000.0;
+let historialSNS = [];
+
+function escaparHTML(valor) {
+    return String(valor ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function renderizarHistorialSNS() {
+    const lista = document.getElementById('lista-historial-sns');
+    const vacio = document.getElementById('historial-sns-vacio');
+
+    if (!historialSNS.length) {
+        lista.innerHTML = '';
+        vacio.hidden = false;
+        return;
+    }
+
+    vacio.hidden = true;
+    lista.innerHTML = historialSNS.map(alerta => {
+        const evento = alerta.evento || {};
+        const tipo = alerta.alert_type || evento.event_type || 'alerta';
+        const vehiculo = evento.source_id || 'Cloud';
+        const descripcion = alerta.descripcion || 'Sin descripción';
+        const hora = alerta.timestamp || '';
+
+        return `
+            <li class="item-historial-sns">
+                <span class="tipo-historial-sns">${escaparHTML(tipo)}</span>
+                <span>${escaparHTML(descripcion)} · Vehículo: <strong>${escaparHTML(vehiculo)}</strong></span>
+                <time class="hora-historial-sns">${escaparHTML(hora)}</time>
+            </li>
+        `;
+    }).join('');
+}
+
+async function actualizarHistorialSNS() {
+    try {
+        const respuesta = await fetch('/api/alertas');
+        if (!respuesta.ok) {
+            throw new Error(`HTTP ${respuesta.status}`);
+        }
+
+        const datos = await respuesta.json();
+        historialSNS = datos.alertas || [];
+        renderizarHistorialSNS();
+    } catch (error) {
+        console.error('Error consultando el histórico SNS:', error);
+    }
+}
 
 const ESTADOS = {
     alerta: {
@@ -154,3 +207,6 @@ async function actualizarSimulacion() {
 
 actualizarSimulacion();
 setInterval(actualizarSimulacion, 1000);
+actualizarHistorialSNS();
+setInterval(actualizarHistorialSNS, 5000);
+
