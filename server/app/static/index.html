@@ -59,6 +59,31 @@
                 <span>0 km → 5 km</span>
             </div>
 
+            <!-- Las RSU se representan solo junto al sentido ida. -->
+            <div class="rsu-fila" aria-label="Unidades de carretera">
+                <div class="rsu" style="left: 25%;">
+                    <span class="rsu-nombre">RSU 1 · 1.250 m</span>
+                    <svg class="rsu-icono" viewBox="0 0 48 52" aria-hidden="true">
+                        <path class="rsu-palo" d="M24 46V22" />
+                        <path class="rsu-plato" d="M24 23c-9 0-15-6-15-14 8 0 15 6 15 14Z" />
+                        <path class="rsu-ondas" d="M12 7C6 12 6 21 12 26" />
+                        <rect class="rsu-caja" x="14" y="39" width="20" height="10" rx="2" />
+                        <circle class="rsu-luz" cx="29" cy="44" r="1.5" />
+                    </svg>
+                </div>
+
+                <div class="rsu" style="left: 75%;">
+                    <span class="rsu-nombre">RSU 2 · 3.750 m</span>
+                    <svg class="rsu-icono" viewBox="0 0 48 52" aria-hidden="true">
+                        <path class="rsu-palo" d="M24 46V22" />
+                        <path class="rsu-plato" d="M24 23c-9 0-15-6-15-14 8 0 15 6 15 14Z" />
+                        <path class="rsu-ondas" d="M12 7C6 12 6 21 12 26" />
+                        <rect class="rsu-caja" x="14" y="39" width="20" height="10" rx="2" />
+                        <circle class="rsu-luz" cx="29" cy="44" r="1.5" />
+                    </svg>
+                </div>
+            </div>
+
             <div
                 class="carril"
                 id="carril-ida"
@@ -121,6 +146,23 @@
                     </tbody>
                 </table>
             </div>
+
+            <section
+                class="historial-sns"
+                aria-labelledby="titulo-historial-sns"
+            >
+                <div class="historial-sns-cabecera">
+                    <div>
+                        <h3 id="titulo-historial-sns">Histórico de notificaciones SNS</h3>
+                        <p>Alertas publicadas por el cloud, de la más reciente a la más antigua.</p>
+                    </div>
+                </div>
+
+                <p id="historial-sns-vacio" class="historial-sns-vacio">
+                    Aún no se ha publicado ninguna alerta.
+                </p>
+                <ul id="lista-historial-sns" class="lista-historial-sns"></ul>
+            </section>
         </section>
     </main>
 
@@ -132,3 +174,4 @@
     </noscript>
 </body>
 </html>
+
