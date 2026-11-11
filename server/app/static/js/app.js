@@ -71,27 +71,62 @@ const ESTADOS = {
     }
 };
 
+// Devuelve la hora de la alerta en milisegundos, o null si no se puede interpretar.
+function marcaDeTiempo(alerta) {
+    const t = Date.parse(alerta.timestamp);
+    return Number.isFinite(t) ? t : null;
+}
+
+// De todas las alertas recibidas, se queda solo con la última de cada coche.
+// Si los timestamps se pueden comparar, gana el más reciente;
+// si no, gana la que aparece más tarde en la lista.
+function ultimaAlertaPorCoche(alertas) {
+    const ultimas = new Map();
+
+    alertas.forEach((alerta, indice) => {
+        const id = alerta.source_id;
+        if (id === null || id === undefined) {
+            return;
+        }
+
+        const actual = ultimas.get(id);
+        if (!actual) {
+            ultimas.set(id, { alerta, indice });
+            return;
+        }
+
+        const tNueva = marcaDeTiempo(alerta);
+        const tActual = marcaDeTiempo(actual.alerta);
+        const esMasReciente =
+            tNueva !== null && tActual !== null && tNueva !== tActual
+                ? tNueva > tActual
+                : indice > actual.indice;
+
+        if (esMasReciente) {
+            ultimas.set(id, { alerta, indice });
+        }
+    });
+
+    return Array.from(ultimas.values(), entrada => entrada.alerta);
+}
+
 async function actualizarSimulacion() {
     try {
         const res = await fetch('/api/data');
         const data = await res.json();
 
-        //const coches = data.coches;
-        //const alertasProximidad = data.alertas_proximidad;
         const coches = data.coches || {};
         const alertasCloud = data.alertas_cloud || [];
-        ////////////////////////////////////////////
 
         const carrilIda = document.getElementById('carril-ida');
         const carrilVuelta = document.getElementById('carril-vuelta');
-        const tabla = document.getElementById('tabla-coches');
         const panelAvisos = document.getElementById('panel-avisos');
         const listaAvisos = document.getElementById('lista-avisos');
 
-        // Avisos de proximidad
+        // Avisos recibidos en Cloud
         if (alertasCloud.length > 0) {
             panelAvisos.style.display = 'block';
-        
+
             listaAvisos.innerHTML = alertasCloud.map(alerta => `
                 <li>
                     <strong>${alerta.event_type}</strong>
@@ -114,41 +149,49 @@ async function actualizarSimulacion() {
         // Limpiar visualización anterior
         carrilIda.querySelectorAll('.coche').forEach(el => el.remove());
         carrilVuelta.querySelectorAll('.coche').forEach(el => el.remove());
-        tabla.innerHTML = '';
 
+        // Un único coche por vehículo, colocado según su última alerta.
+        const ultimasAlertas = ultimaAlertaPorCoche(alertasCloud);
+        const idsConAlerta = new Set();
 
-        // Marcador del vehículo en la posición registrada al producirse el evento.
-        alertasCloud.forEach(alerta => {
+        ultimasAlertas.forEach(alerta => {
             const posicion = Number(alerta.x);
-        
-            if (!Number.isFinite(posicion)) {
+
+            if (alerta.x === null || alerta.x === undefined || !Number.isFinite(posicion)) {
                 return;
             }
-        
+
+            idsConAlerta.add(alerta.source_id);
+
             const porcentaje = Math.min(
                 100,
                 Math.max(0, (posicion / LONGITUD_CARRETERA_M) * 100)
             );
-        
+
             const cocheEvento = document.createElement('div');
             cocheEvento.className = 'coche alerta';
             cocheEvento.style.left = `${porcentaje}%`;
-            cocheEvento.textContent = alerta.source_id
+            cocheEvento.textContent = String(alerta.source_id)
                 .replace('veh-', '')
                 .replace('Coche_', '');
-        
+
             cocheEvento.title =
                 `${alerta.event_type}: ${alerta.descripcion} ` +
                 `(${posicion} m, ${alerta.timestamp})`;
-        
+
             const carril = alerta.direction === 'vuelta'
                 ? carrilVuelta
                 : carrilIda;
-        
+
             carril.appendChild(cocheEvento);
         });
 
+        // Coches en movimiento que no tienen alerta (para no duplicar los que ya se han dibujado).
         Object.values(coches).forEach(coche => {
+            if (idsConAlerta.has(coche.source_id)) {
+                return;
+            }
+
             const porcentaje = Math.min(100, Math.max(0, (coche.x / LONGITUD_CARRETERA_M) * 100));
 
             let estado = ESTADOS.normal;
@@ -158,46 +201,16 @@ async function actualizarSimulacion() {
                 estado = ESTADOS.proximidad;
             }
 
-            // Coche en la carretera
             const cocheEl = document.createElement('div');
             cocheEl.className = `coche ${estado.clase.replace('estado-', '')}`;
             cocheEl.style.left = `${porcentaje}%`;
-            cocheEl.textContent = coche.source_id.replace('veh-', '');
+            cocheEl.textContent = String(coche.source_id).replace('veh-', '');
 
             if (coche.direction === 'ida') {
                 carrilIda.appendChild(cocheEl);
             } else {
                 carrilVuelta.appendChild(cocheEl);
             }
-
-            // Tarjeta de la flota
-            const sentido = coche.direction === 'ida' ? 'Ida' : 'Vuelta';
-            const velocidad = Number(coche.speed).toFixed(0);
-            const posicion = Number(coche.x).toFixed(0);
-
-            const fila = document.createElement('tr');
-            fila.tabIndex = 0;
-            fila.innerHTML = `
-                <td>
-                    <span class="vehiculo-id">${coche.source_id}</span>
-                </td>
-                <td>
-                    <span class="dato-valor">${posicion} m</span>
-                </td>
-                <td>
-                    <span class="sentido-chip">${sentido}</span>
-                </td>
-                <td>
-                    <span class="dato-valor">${velocidad} km/h</span>
-                </td>
-                <td>
-                    <span class="estado ${estado.clase}" style="--estado-color: ${estado.color}">
-                        ${coche.event_type}
-                    </span>
-                </td>
-            `;
-
-            tabla.appendChild(fila);
         });
 
     } catch (err) {
