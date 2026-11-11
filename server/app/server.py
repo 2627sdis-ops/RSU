@@ -254,20 +254,27 @@ def registrar_alerta_cloud(evento: dict):
 def procesar_evento(evento: dict):
     """Procesa un evento. Si algo falla lanza una excepción y el mensaje
     se queda en SQS para reintentarlo."""
+    
     if not guardar_evento_dynamodb(evento):
-        print(f"♻️ Evento duplicado ignorado: {evento.get('event_id')}", flush=True)
+        print(
+            f"♻️ Evento duplicado ignorado: "
+            f"{evento.get('event_id')}",
+            flush=True,
+        )
         return
+
+    # Mostrar inmediatamente la última incidencia de este coche.
+    registrar_alerta_cloud(evento)
 
     try:
         for alerta in detectar_alertas(evento):
             publicar_alerta_sns(alerta)
             guardar_alerta_dynamodb(alerta)
     except Exception:
-        # Se deshace el registro para que el reintento lo procese entero.
-        tabla_eventos.delete_item(Key={"event_id": str(evento.get("event_id"))})
+        tabla_eventos.delete_item(
+            Key={"event_id": str(evento.get("event_id"))}
+        )
         raise
-
-    registrar_alerta_cloud(evento)
 
 def consumidor_sqs(queue_url):
     # lee de la cola sqs y procesa los eventos
