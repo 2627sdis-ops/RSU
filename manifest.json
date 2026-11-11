@@ -1,4 +1,4 @@
-{
+{ 
   "version": "${{ github.sha }}",
   "server_image_uri": "${{ env.SERVER_URI }}",
   "rsu_image_uri": "${{ env.RSU_URI }}",
