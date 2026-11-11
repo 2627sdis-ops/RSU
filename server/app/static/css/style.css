@@ -583,6 +583,71 @@ h2 {
 }
 
 /* ==================================================
+   HISTÓRICO SNS
+   ================================================== */
+
+.historial-sns {
+    margin-top: 20px;
+    padding: 20px 22px;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 20px;
+    background: rgba(245, 245, 244, 0.65);
+    box-shadow: var(--sombra);
+}
+
+.historial-sns h3 {
+    margin: 0;
+    color: var(--marron);
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.15rem;
+}
+
+.historial-sns p {
+    margin: 4px 0 0;
+    color: var(--texto-suave);
+    font-size: 0.85rem;
+}
+
+.lista-historial-sns {
+    max-height: 260px;
+    margin: 16px 0 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+}
+
+.item-historial-sns {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 11px 0;
+    border-top: 1px solid rgba(120, 71, 23, 0.12);
+    font-size: 0.86rem;
+}
+
+.item-historial-sns:first-child {
+    border-top: 0;
+}
+
+.tipo-historial-sns {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(192, 90, 74, 0.14);
+    color: #913a2e;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.hora-historial-sns {
+    color: var(--texto-suave);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* ==================================================
    PANTALLAS PEQUEÑAS Y MOVIMIENTO REDUCIDO
    ================================================== */
 
@@ -612,6 +677,14 @@ h2 {
     .panel-avisos {
         padding: 18px;
     }
+
+    .item-historial-sns {
+        grid-template-columns: auto 1fr;
+    }
+
+    .hora-historial-sns {
+        grid-column: 2;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -624,3 +697,5 @@ h2 {
         animation: none;
     }
 }
+
+
