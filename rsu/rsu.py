@@ -686,7 +686,7 @@ def on_message(client, userdata, msg):
 
                 print(
                     f"☁️ [{RSU_ID}] Evento '{event_data.get('event_type')}' "
-                    f"enviado al Cloud"
+                    f"({event_data.get('event_id')}) enviado al Cloud"
                 )
 
             except queue.Full:
