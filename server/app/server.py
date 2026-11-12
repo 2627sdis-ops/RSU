@@ -23,6 +23,7 @@ sqs = boto3.client("sqs", region_name=AWS_REGION)
 CLOUDWATCH_NAMESPACE = os.getenv("CLOUDWATCH_NAMESPACE", "V2X")
 METRICAS_INTERVALO_S = float(os.getenv("METRICAS_INTERVALO_S", "10"))
 METRICAS_LOTE_MAX = 500  # CloudWatch admite hasta 1000 datos por llamada
+TTL_DIAS = int(os.getenv("TTL_DIAS", "7"))
 
 cloudwatch = boto3.client("cloudwatch", region_name=AWS_REGION)
 
@@ -218,6 +219,7 @@ def guardar_evento_dynamodb(evento: dict) -> bool:
             payload.get("descripcion", payload.get("description", "Sin descripción"))
         ),
         "payload": float_a_decimal(payload),
+        "ttl": int(time.time()) + TTL_DIAS * 86400,
     }
 
     try:
@@ -236,7 +238,10 @@ def guardar_evento_dynamodb(evento: dict) -> bool:
 
 def guardar_alerta_dynamodb(alerta: dict):
     """Guarda una alerta publicada en la tabla de alertas."""
-    tabla_alertas.put_item(Item=float_a_decimal(alerta))
+    item = float_a_decimal(alerta)
+    item["ttl"] = int(time.time()) + TTL_DIAS * 86400
+    tabla_alertas.put_item(Item=item)
+
 
 def cargar_alertas_recientes_dynamodb(limite=50):
     """Carga los últimos eventos de DynamoDB al iniciar el servidor."""
