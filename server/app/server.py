@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 from decimal import Decimal
 from botocore.exceptions import ClientError
 import json
-import os
+import os 
 import threading
 import time
 import uuid
