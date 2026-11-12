@@ -370,6 +370,7 @@ def procesar_evento(evento: dict):
         for alerta in detectar_alertas(evento):
             publicar_alerta_sns(alerta)
             guardar_alerta_dynamodb(alerta)
+            anotar_metrica("AlertasGeneradas", 1, "Count")
    
     except Exception:
         tabla_eventos.delete_item(
@@ -417,7 +418,8 @@ def consumidor_sqs(queue_url):
 
                 except Exception as error:
                     # No se borra: SQS lo volverá a entregar al acabar el
-                    # visibility timeout (y tras 5 intentos irá a la DLQ).
+                    anotar_metrica("ErroresProcesamiento", 1, "Count")
+                    
                     print(f"Error procesando mensaje, se reintentará: {error}", flush=True)
                     continue
 
