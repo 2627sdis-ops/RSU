@@ -18,6 +18,105 @@ PORT = int(os.getenv("PORT", "5000"))
 
 sqs = boto3.client("sqs", region_name=AWS_REGION)
 
+
+############################################## Métricas CloudWatch
+CLOUDWATCH_NAMESPACE = os.getenv("CLOUDWATCH_NAMESPACE", "V2X")
+METRICAS_INTERVALO_S = float(os.getenv("METRICAS_INTERVALO_S", "10"))
+METRICAS_LOTE_MAX = 500  # CloudWatch admite hasta 1000 datos por llamada
+
+cloudwatch = boto3.client("cloudwatch", region_name=AWS_REGION)
+
+metricas_pendientes = []
+metricas_lock = threading.Lock()
+aviso_reloj_mostrado = False
+
+
+def anotar_metrica(nombre, valor, unidad, dimensiones=None):
+    dato = {
+        "MetricName": nombre,
+        "Value": float(valor),
+        "Unit": unidad,
+        "Timestamp": datetime.now(timezone.utc),
+    }
+    if dimensiones:
+        dato["Dimensions"] = [
+            {"Name": clave, "Value": str(valor_dim)}
+            for clave, valor_dim in dimensiones.items()
+        ]
+    with metricas_lock:
+        metricas_pendientes.append(dato)
+
+
+def enviar_metricas():
+    with metricas_lock:
+        pendientes = metricas_pendientes[:]
+        metricas_pendientes.clear()
+
+    for i in range(0, len(pendientes), METRICAS_LOTE_MAX):
+        try:
+            cloudwatch.put_metric_data(
+                Namespace=CLOUDWATCH_NAMESPACE,
+                MetricData=pendientes[i:i + METRICAS_LOTE_MAX],
+            )
+        except Exception as error:
+            # Las métricas nunca deben tumbar el servicio: se descarta el lote.
+            print(f"No se pudieron enviar métricas a CloudWatch: {error}", flush=True)
+
+
+def bucle_envio_metricas():
+    while True:
+        time.sleep(METRICAS_INTERVALO_S)
+        enviar_metricas()
+
+
+def registrar_metricas(evento: dict, mensaje: dict, procesado: bool):
+    """Anota las métricas de un mensaje ya tratado. Nunca lanza excepciones.
+    procesado=False significa que el event_id ya existía (duplicado)."""
+    global aviso_reloj_mostrado
+
+    try:
+        if not procesado:
+            anotar_metrica("EventosDuplicados", 1, "Count")
+            return
+
+        anotar_metrica("EventosProcesados", 1, "Count")
+
+        rsu_id = str(evento.get("rsu_id") or "desconocida")
+        ahora = datetime.now(timezone.utc)
+
+        # Latencia desde que el coche generó el evento.
+        event_time = evento.get("event_time")
+        if event_time:
+            instante = datetime.fromisoformat(str(event_time))
+            if instante.tzinfo is None:
+                instante = instante.replace(tzinfo=timezone.utc)
+
+            latencia_ms = (ahora - instante).total_seconds() * 1000.0
+
+            if latencia_ms >= 0:
+                anotar_metrica("LatenciaExtremoAExtremo", latencia_ms, "Milliseconds")
+                anotar_metrica(
+                    "LatenciaExtremoAExtremo", latencia_ms, "Milliseconds",
+                    {"rsu_id": rsu_id},
+                )
+            elif not aviso_reloj_mostrado:
+                aviso_reloj_mostrado = True
+                print(
+                    "Aviso: latencia negativa, el reloj del origen va adelantado "
+                    "respecto al servidor. Se ignoran esas muestras.",
+                    flush=True,
+                )
+
+        # Tiempo desde que SQS recibió el mensaje (reloj de AWS).
+        enviado_ms = (mensaje.get("Attributes") or {}).get("SentTimestamp")
+        if enviado_ms:
+            en_cola_ms = ahora.timestamp() * 1000.0 - float(enviado_ms)
+            anotar_metrica("TiempoEnCola", max(0.0, en_cola_ms), "Milliseconds")
+
+    except Exception as error:
+        print(f"No se pudo registrar la métrica: {error}", flush=True)
+#####################################################################
+
 ############################################## Nuevo
 SNS_TOPIC_ARN = os.getenv(
     "SNS_TOPIC_ARN",
@@ -254,6 +353,7 @@ def registrar_alerta_cloud(evento: dict):
 def procesar_evento(evento: dict):
     """Procesa un evento. Si algo falla lanza una excepción y el mensaje
     se queda en SQS para reintentarlo."""
+       
     
     if not guardar_evento_dynamodb(evento):
         print(
@@ -261,7 +361,7 @@ def procesar_evento(evento: dict):
             f"{evento.get('event_id')}",
             flush=True,
         )
-        return
+        return False
 
     # Mostrar inmediatamente la última incidencia de este coche.
     registrar_alerta_cloud(evento)
@@ -270,11 +370,14 @@ def procesar_evento(evento: dict):
         for alerta in detectar_alertas(evento):
             publicar_alerta_sns(alerta)
             guardar_alerta_dynamodb(alerta)
+   
     except Exception:
         tabla_eventos.delete_item(
             Key={"event_id": str(evento.get("event_id"))}
         )
         raise
+
+    return True
 
 def consumidor_sqs(queue_url):
     # lee de la cola sqs y procesa los eventos
@@ -287,6 +390,7 @@ def consumidor_sqs(queue_url):
                 MaxNumberOfMessages=10,
                 WaitTimeSeconds=20,  # long polling
                 MessageAttributeNames=["All"],
+                AttributeNames=["SentTimestamp"],
             )
 
             for mensaje in response.get("Messages", []):
@@ -297,12 +401,15 @@ def consumidor_sqs(queue_url):
                     # El Cloud no procesa telemetría periódica.
                     if event_type == "position":
                         print(f"Telemetría descartada en Cloud: {cuerpo.get('source_id')}")
+                        procesado = True
                     else:
                         print(
                             f"☁️ Evento recibido desde {cuerpo.get('rsu_id', 'RSU desconocida')}: "
                             f"{event_type}"
                         )
-                        procesar_evento(cuerpo)
+                        procesado = procesar_evento(cuerpo)
+
+                    registrar_metricas(cuerpo, mensaje, procesado)
 
                 except json.JSONDecodeError:
                     # Un mensaje mal formado no se arregla reintentando: se borra.
@@ -460,6 +567,9 @@ def main():
     respuesta_url = sqs.get_queue_url(QueueName=SQS_QUEUE_NAME)
     queue_url = respuesta_url["QueueUrl"]
 
+    hilo_metricas = threading.Thread(target=bucle_envio_metricas, daemon=True)
+    hilo_metricas.start()
+    
     hilo_sqs = threading.Thread(target=consumidor_sqs, args=(queue_url,), daemon=True)
     hilo_sqs.start()
 
