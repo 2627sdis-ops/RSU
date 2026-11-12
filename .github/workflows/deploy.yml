@@ -41,15 +41,20 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           REPO_SERVER: mireposdis
           REPO_RSU: sdis-rsu
+          IMAGE_TAG: ${{ github.sha }}
+          BUILDX_NO_DEFAULT_ATTESTATIONS: 1
         run: |
-          docker build -t $ECR_REGISTRY/$REPO_SERVER:latest ./server
+          docker build -t $ECR_REGISTRY/$REPO_SERVER:$IMAGE_TAG -t $ECR_REGISTRY/$REPO_SERVER:latest ./server
+          docker push $ECR_REGISTRY/$REPO_SERVER:$IMAGE_TAG
           docker push $ECR_REGISTRY/$REPO_SERVER:latest
 
-          docker build -t $ECR_REGISTRY/$REPO_RSU:latest ./rsu
+          docker build -t $ECR_REGISTRY/$REPO_RSU:$IMAGE_TAG -t $ECR_REGISTRY/$REPO_RSU:latest ./rsu
+          docker push $ECR_REGISTRY/$REPO_RSU:$IMAGE_TAG
           docker push $ECR_REGISTRY/$REPO_RSU:latest
+
+          echo "SERVER_URI=$ECR_REGISTRY/$REPO_SERVER:$IMAGE_TAG" >> $GITHUB_ENV
+          echo "RSU_URI=$ECR_REGISTRY/$REPO_RSU:$IMAGE_TAG" >> $GITHUB_ENV
           
-          echo "SERVER_URI=$ECR_REGISTRY/$REPO_SERVER:latest" >> $GITHUB_ENV
-          echo "RSU_URI=$ECR_REGISTRY/$REPO_RSU:latest" >> $GITHUB_ENV
 
       - name: 7. Generar manifiesto de despliegue y subir a S3 (sdisprueba)
         run: |
