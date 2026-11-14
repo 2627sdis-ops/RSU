@@ -65,4 +65,4 @@ aws sns subscribe \
   --notification-endpoint "$ENDPOINT_URL" \
   --region "$AWS_REGION"
 echo "Suscripción solicitada con éxito."
-sudo docker logs -f rsu_nodo_1
+
