@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 cd /tmp
-aws s3 cp s3://minuevoprueba1/manifest.json ./manifest.json
+aws s3 cp s3://minuevoprueba1/manifest.json ./manifest.json 
 AWS_REGION="us-east-1"
 RSU_ID="RSU_1" # Cambiar a RSU_2 en la segunda máquina
 SNS_HTTP_PORT=8443
