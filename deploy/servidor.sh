@@ -45,4 +45,3 @@ aws sns list-subscriptions-by-topic \
   --region "$AWS_REGION" \
   --output table
 
-sudo docker logs -f mireposdis
