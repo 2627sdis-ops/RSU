@@ -24,7 +24,7 @@ port = 1883
 [general]
 # Archivo CSV donde se anota cada incidencia generada.
 # Sirve para comprobar las metricas en los experimentos
-log_csv = exp1_nivel0.csv
+log_csv = exp1_nivel05.csv
 
 
 # ----------------------------------------------------------
