@@ -1,0 +1,79 @@
+# ==========================================================
+# CONFIGURACIÓN DEL SIMULADOR V2X
+# Va en la misma carpeta que Coches_MQTT.py
+# Los comentarios empiezan por # y pueden ir al final de una línea.
+# Las probabilidades van de 0.0 (nunca) a 1.0 (siempre).
+# ==========================================================
+
+
+# ----------------------------------------------------------
+# RSU: IP pública actual de cada EC2
+# ----------------------------------------------------------
+[RSU_1]
+host = 3.80.89.93
+port = 1883
+
+[RSU_2]
+host = 13.218.249.86
+port = 1883
+
+
+# ----------------------------------------------------------
+# General
+# ----------------------------------------------------------
+[general]
+# Archivo CSV donde se anota cada incidencia generada.
+# Sirve para comprobar las metricas en los experimentos
+log_csv = exp1_nivel0.csv
+
+
+# ----------------------------------------------------------
+# ANOMALÍAS
+# ----------------------------------------------------------
+[anomalias]
+# true  = solo afectan a las incidencias (las que llegan al cloud)
+# false = afectan también a la telemetría de posición.
+
+solo_incidencias = true
+
+duplicado = 0.2        # probabilidad de enviar el mismo mensaje dos veces
+
+
+# ----------------------------------------------------------
+# COCHES [coche:ID]
+# ----------------------------------------------------------
+
+[coche:veh-001]
+posicion_inicial_m = 0.0
+sentido = 1
+velocidad_kmh = 80.0
+prob_alerta = 0.2
+intervalo_s = 2.0
+
+[coche:veh-002]
+posicion_inicial_m = 2500.0
+sentido = 1
+velocidad_kmh = 80.0
+prob_alerta = 0.2
+intervalo_s = 2.0
+
+[coche:veh-003]
+posicion_inicial_m = 3500.0
+sentido = -1
+velocidad_kmh = 80.0
+prob_alerta = 0.2
+intervalo_s = 2.0
+
+[coche:veh-004]
+posicion_inicial_m = 5000.0
+sentido = -1
+velocidad_kmh = 80.0
+prob_alerta = 0.2
+intervalo_s = 2.0
+
+[coche:veh-005]
+posicion_inicial_m = 3000.0
+sentido = 1
+velocidad_kmh = 80.0
+prob_alerta = 0.2
+intervalo_s = 2.0
