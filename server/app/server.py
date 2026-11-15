@@ -19,10 +19,15 @@ PORT = int(os.getenv("PORT", "5000"))
 sqs = boto3.client("sqs", region_name=AWS_REGION)
 
 
-############################################## Métricas CloudWatch
+
+
+########################################################################
+# CLOUDWACH METRICAS
+########################################################################
+
 CLOUDWATCH_NAMESPACE = os.getenv("CLOUDWATCH_NAMESPACE", "V2X")
 METRICAS_INTERVALO_S = float(os.getenv("METRICAS_INTERVALO_S", "10"))
-METRICAS_LOTE_MAX = 500  # CloudWatch admite hasta 1000 datos por llamada
+METRICAS_LOTE_MAX = 500  
 TTL_DIAS = int(os.getenv("TTL_DIAS", "7"))
 
 cloudwatch = boto3.client("cloudwatch", region_name=AWS_REGION)
@@ -102,11 +107,7 @@ def registrar_metricas(evento: dict, mensaje: dict, procesado: bool):
                 )
             elif not aviso_reloj_mostrado:
                 aviso_reloj_mostrado = True
-                print(
-                    "Aviso: latencia negativa, el reloj del origen va adelantado "
-                    "respecto al servidor. Se ignoran esas muestras.",
-                    flush=True,
-                )
+                print("Aviso: latencia negativa, el reloj del origen va adelantado respecto al servidor. Se ignoran esas muestras.", flush=True)
 
         # Tiempo desde que SQS recibió el mensaje (reloj de AWS).
         enviado_ms = (mensaje.get("Attributes") or {}).get("SentTimestamp")
@@ -116,16 +117,19 @@ def registrar_metricas(evento: dict, mensaje: dict, procesado: bool):
 
     except Exception as error:
         print(f"No se pudo registrar la métrica: {error}", flush=True)
-#####################################################################
 
-############################################## Nuevo
-SNS_TOPIC_ARN = os.getenv(
-    "SNS_TOPIC_ARN",
-    "arn:aws:sns:us-east-1:TU_ID_CUENTA:v2x-alertas"
-)
+############################################################################################
+
+
+
+
+
+##############################################
+SNS_TOPIC_ARN = os.getenv("SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:ID_CUENTA:v2x-alertas")
 
 sns = boto3.client("sns", region_name=AWS_REGION)
-###################################################3
+###################################################
+
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -136,6 +140,7 @@ MAX_ALERTAS_CLOUD = 50
 alertas_cloud_activas = []
 alertas_cloud_lock = threading.Lock()
 
+
 # Detección de zona peligrosa: UMBRAL_ZONA incidencias en el mismo tramo de
 # TRAMO_M metros dentro de VENTANA_ZONA_S segundos.
 TRAMO_M = 500.0
@@ -143,8 +148,12 @@ VENTANA_ZONA_S = 300.0
 UMBRAL_ZONA = 2
 incidencias_por_tramo = {}  # tramo -> lista de (instante, event_id)
 
-################################################################3333
 
+
+
+########################################################################
+# Base de datos
+########################################################################
 
 DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "v2x_eventos")
 DYNAMODB_ALERTS_TABLE = os.getenv("DYNAMODB_ALERTS_TABLE", "v2x_alertas")
@@ -176,6 +185,7 @@ def asegurar_tabla_dynamodb(nombre, clave):
         else:
             print(f"Error verificando tabla DynamoDB: {e}")
 
+
 def borrar_eventos_dynamodb():
     respuesta = tabla_eventos.scan(
         ProjectionExpression="event_id"
@@ -187,6 +197,8 @@ def borrar_eventos_dynamodb():
 
     print("Eventos anteriores eliminados de DynamoDB.")
 
+
+
 def float_a_decimal(obj):
     """Convierte floats a Decimal para compatibilidad con DynamoDB."""
     if isinstance(obj, float):
@@ -196,6 +208,7 @@ def float_a_decimal(obj):
     if isinstance(obj, list):
         return [float_a_decimal(v) for v in obj]
     return obj
+
 
 def guardar_evento_dynamodb(evento: dict) -> bool:
     """Guarda un evento en DynamoDB.
@@ -223,11 +236,8 @@ def guardar_evento_dynamodb(evento: dict) -> bool:
     }
 
     try:
-        # Escritura condicional: solo se guarda si el event_id no existe.
-        tabla_eventos.put_item(
-            Item=item,
-            ConditionExpression="attribute_not_exists(event_id)",
-        )
+        # solo se guarda si el event_id no existe.
+        tabla_eventos.put_item(Item=item, ConditionExpression="attribute_not_exists(event_id)" )
     except ClientError as e:
         if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
             return False
@@ -235,6 +245,9 @@ def guardar_evento_dynamodb(evento: dict) -> bool:
 
     print(f"Evento {item['event_id']} guardado en DynamoDB.", flush=True)
     return True
+
+
+
 
 def guardar_alerta_dynamodb(alerta: dict):
     """Guarda una alerta publicada en la tabla de alertas."""
@@ -266,6 +279,13 @@ def cargar_alertas_recientes_dynamodb(limite=50):
     except Exception as e:
         print(f"No se pudieron cargar eventos históricos de DynamoDB: {e}")
 
+########################################################################
+########################################################################
+
+
+
+
+
 
 ########################################################################
 # ALERTAS
@@ -283,9 +303,8 @@ def crear_alerta(alert_type, alert_id, evento, descripcion):
 
 def detectar_alertas(evento: dict) -> list:
     """Reglas de alerta del cloud.
-
-    1. Cada incidencia (accidente, obras, bache...) genera un aviso.
-    2. Zona peligrosa: UMBRAL_ZONA incidencias en el mismo tramo en la ventana.
+        Cada incidencia (accidente, obras, bache...) genera un aviso.
+        Zona peligrosa: UMBRAL_ZONA incidencias en el mismo tramo en la ventana.
     """
     event_id = evento.get("event_id")
     event_type = evento.get("event_type", "desconocido")
@@ -305,6 +324,7 @@ def detectar_alertas(evento: dict) -> list:
         for instante, eid in incidencias_por_tramo.get(tramo, [])
         if ahora - instante <= VENTANA_ZONA_S
     ]
+    
     # Si es un reintento del mismo evento no se cuenta dos veces.
     if event_id not in [eid for _, eid in recientes]:
         recientes.append((ahora, event_id))
@@ -355,17 +375,18 @@ def registrar_alerta_cloud(evento: dict):
         del alertas_cloud_activas[MAX_ALERTAS_CLOUD:]
 ##################################################################################################################
 
+
+
+
+
+
 def procesar_evento(evento: dict):
     """Procesa un evento. Si algo falla lanza una excepción y el mensaje
     se queda en SQS para reintentarlo."""
        
     
     if not guardar_evento_dynamodb(evento):
-        print(
-            f"♻️ Evento duplicado ignorado: "
-            f"{evento.get('event_id')}",
-            flush=True,
-        )
+        print(f"♻️ Evento duplicado ignorado: {evento.get('event_id')}", flush=True,)
         return False
 
     # Mostrar inmediatamente la última incidencia de este coche.
@@ -385,6 +406,8 @@ def procesar_evento(evento: dict):
 
     return True
 
+
+
 def consumidor_sqs(queue_url):
     # lee de la cola sqs y procesa los eventos
     print(f" Escuchando SQS en segundo plano: {queue_url}", flush=True)
@@ -394,7 +417,7 @@ def consumidor_sqs(queue_url):
             response = sqs.receive_message(
                 QueueUrl=queue_url,
                 MaxNumberOfMessages=10,
-                WaitTimeSeconds=20,  # long polling
+                WaitTimeSeconds=20,
                 MessageAttributeNames=["All"],
                 AttributeNames=["SentTimestamp"],
             )
@@ -442,7 +465,12 @@ def consumidor_sqs(queue_url):
             time.sleep(2)
 
 
-########################################### Nuevo
+
+
+###############################################################################
+ # ALERTAS SNS
+###############################################################################
+
 def publicar_alerta_sns(alerta):
     """Publica la alerta en SNS. Si falla, lanza la excepción."""
     respuesta = sns.publish(
@@ -462,7 +490,13 @@ def publicar_alerta_sns(alerta):
         f"{respuesta['MessageId']}",
         flush=True,
     )
-###################################################
+#######################################################################
+
+
+
+########################################################################
+# Servidor HTTP
+########################################################################
 
 class ServidorHTTPNativo(BaseHTTPRequestHandler):
     # Sirve la API JSON y los recursos estaticos
@@ -518,7 +552,7 @@ class ServidorHTTPNativo(BaseHTTPRequestHandler):
             self._responder(200, contenido, "application/json; charset=utf-8")
             return
 
-      ###########################################################3
+        
         if ruta in ("/api/historial", "/api/alertas"):
             try:
                 if ruta == "/api/historial":
@@ -532,8 +566,8 @@ class ServidorHTTPNativo(BaseHTTPRequestHandler):
                     "application/json",
                 )
             return
-###############################################################################
 
+        
         if ruta in ("/", "/index.html"):
             archivo = STATIC_DIR / "index.html"
             content_type = "text/html; charset=utf-8"
@@ -558,6 +592,10 @@ class ServidorHTTPNativo(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Evita llenar la consola con una linea por cada consulta periodica del navegador.
         return
+
+########################################################################
+
+
 
 
 def main():
