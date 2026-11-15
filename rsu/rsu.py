@@ -10,7 +10,6 @@ import time
 import threading 
 import uuid
 import queue
-
 import boto3
 import paho.mqtt.client as mqtt
 
@@ -57,17 +56,16 @@ stop_event = threading.Event()
 cliente_mqtt_global = None
 
 # Incidencias que se resuelven en el edge con una alerta local inmediata.
-EVENTOS_SOLO_EDGE = {
-    "frenada_brusca",
-    "aguaplaning",
-}
+EVENTOS_SOLO_EDGE = { "frenada_brusca", "aguaplaning" }
 DISTANCIA_AVISO_PELIGRO_M = 300.0
 
 # alert_id de las alertas del cloud ya reenviadas (SNS puede repetir entregas).
 alertas_cloud_vistas = set()
 
+
+
 # ============================================================
-# ENVÍO DE EVENTOS A SQS
+# ENVÍO EVENTOS A SQS
 # ============================================================
 
 def hilo_sqs_worker():
@@ -91,10 +89,7 @@ def hilo_sqs_worker():
                     QUEUE_URL = sqs.get_queue_url(QueueName=SQS_QUEUE_NAME)["QueueUrl"]
                     print(f"[{RSU_ID}] Conectado a SQS: {QUEUE_URL}", flush=True)
                 except Exception as error:
-                    print(
-                        f"⚠️ [{RSU_ID}] No se pudo obtener la cola SQS. "
-                        f"Buffering activo. Reintentando en 5s... Error: {error}"
-                    )
+                    print(f"⚠️ [{RSU_ID}] No se pudo obtener la cola SQS. Buffering activo. Reintentando en 5s... Error: {error}")
                     time.sleep(5)
                     continue
 
@@ -112,24 +107,20 @@ def hilo_sqs_worker():
                     },
                 )
 
-                print(
-                    f"🚀 [{RSU_ID}] Evento '{event_type}' de "
-                    f"{event_data.get('source_id')} reenviado a SQS"
-                )
-
+                print(f"[{RSU_ID}] Evento '{event_type}' de {event_data.get('source_id')} reenviado a SQS")
                 exito = True
                 cola_eventos.task_done()
 
             except Exception as error:
-                print(
-                    f"⚠️ [{RSU_ID}] Fallo de conexión con AWS SQS. "
-                    f"Buffering activo. Reintentando en 5s... Error: {error}"
-                )
+                print(f"⚠️ [{RSU_ID}] Fallo de conexión con AWS SQS. Buffering activo. Reintentando en 5s... Error: {error}")
                 time.sleep(5)
 
 
+
+
+
 # ============================================================
-# BASE DE DATOS LOCAL DEL RSU
+# ESTADO COCHES RSU
 # ============================================================
 
 def actualizar_estado_coche(event_data: dict):
@@ -160,7 +151,6 @@ def actualizar_estado_coche(event_data: dict):
                 "direction",
                 anterior.get("direction", "ida")
             ),
-            #"hazard": payload.get("hazard", anterior.get("hazard", False)),
             "event_type": event_data.get("event_type", "position"),
             "last_update": datetime.now().strftime("%H:%M:%S"),
             "last_seen": ahora,
@@ -197,8 +187,11 @@ def registrar_mensaje(destino: list, mensaje: dict):
         del destino[MAX_MENSAJES_DASHBOARD:]
 
 
+
+
+
 # ============================================================
-# ALERTAS MQTT DE PROXIMIDAD
+# ALERTAS MQTT PROXIMIDAD
 # ============================================================
 
 def enviar_alerta_proximidad(cliente, alerta: dict, destinatarios: list):
@@ -230,28 +223,16 @@ def enviar_alerta_proximidad(cliente, alerta: dict, destinatarios: list):
             )
 
             if resultado.rc == mqtt.MQTT_ERR_SUCCESS:
-                print(
-                    f"[{RSU_ID}] Alerta de proximidad enviada a "
-                    f"{vehicle_id}: {alerta['coche1']} - "
-                    f"{alerta['coche2']} ({alerta['distancia']} m)"
-                )
+                print(f"[{RSU_ID}] Alerta de proximidad enviada a {vehicle_id}: {alerta['coche1']} - {alerta['coche2']} ({alerta['distancia']} m)")
             else:
-                print(
-                    f"[{RSU_ID}] Error publicando alerta para "
-                    f"{vehicle_id}: código {resultado.rc}"
-                )
+                print(f"[{RSU_ID}] Error publicando alerta para {vehicle_id}: código {resultado.rc}")
 
         except Exception as error:
-            print(
-                f"[{RSU_ID}] Error enviando alerta a "
-                f"{vehicle_id}: {error}"
-            )
+            print(f"[{RSU_ID}] Error enviando alerta a {vehicle_id}: {error}")
 
 
-# ============================================================
-# DETECCIÓN LOCAL DE PROXIMIDAD
-# ============================================================
 
+# DETECCIÓN PROXIMIDAD
 def verificar_proximidad(cliente):
     global alertas_proximidad_activas
 
@@ -286,22 +267,13 @@ def verificar_proximidad(cliente):
 
                     alertas.append(alerta)
 
-                    pareja_key = tuple(
-                        sorted([
-                            v1["source_id"],
-                            v2["source_id"],
-                        ])
-                    )
+                    pareja_key = tuple( sorted([ v1["source_id"], v2["source_id"] ]) )
 
                     if pareja_key not in PAREJAS_NOTIFICADAS:
                         PAREJAS_NOTIFICADAS.add(pareja_key)
                         nuevas_alertas.append(alerta)
 
-                        print(
-                            f"[{RSU_ID}] AVISO DE PROXIMIDAD: "
-                            f"{v1['source_id']} y {v2['source_id']} "
-                            f"están a {distancia:.1f} m"
-                        )
+                        print(f"[{RSU_ID}] AVISO DE PROXIMIDAD: {v1['source_id']} y {v2['source_id']} están a {distancia:.1f} metros")
 
         parejas_a_remover = set()
 
@@ -312,10 +284,7 @@ def verificar_proximidad(cliente):
                 parejas_a_remover.add(pareja)
                 continue
 
-            distancia = abs(
-                estado_coches[id1]["x"] -
-                estado_coches[id2]["x"]
-            )
+            distancia = abs( estado_coches[id1]["x"] - estado_coches[id2]["x"] )
 
             if distancia > DISTANCIA_REARME_M:
                 parejas_a_remover.add(pareja)
@@ -326,20 +295,16 @@ def verificar_proximidad(cliente):
         alertas_proximidad_activas = alertas
 
     for alerta in nuevas_alertas:
-        enviar_alerta_proximidad(
-            cliente,
-            alerta,
-            destinatarios,
-        )
+        enviar_alerta_proximidad(cliente, alerta, destinatarios)
+
 
 
 # ============================================================
-# ALERTA LOCAL DE FRENADA BRUSCA Y AGUAPLANING
+# ALERTA FRENADA BRUSCA Y AGUAPLANING
 # ============================================================
 
 def alerta_local_peligro(cliente, event_data: dict):
     """Avisa a los coches que se acercan al punto del peligro.
-
     - frenada_brusca: solo a los que van detrás en el mismo sentido.
     - aguaplaning: a los que se acercan en cualquier sentido.
     """
@@ -382,10 +347,8 @@ def alerta_local_peligro(cliente, event_data: dict):
         cliente.publish(f"vehiculos/{vehicle_id}/alertas", json.dumps(mensaje), qos=1)
 
     print(
-        f"🟠 [{RSU_ID}] {event_type} de {origen} en x={x0:.0f} m: "
-        f"aviso local a {len(destinatarios)} vehículos",
-        flush=True,
-    )
+        f"🟠 [{RSU_ID}] {event_type} de {origen} en x={x0:.0f} m: aviso local a {len(destinatarios)} vehículos", flush=True)
+
 
 
 # ============================================================
@@ -405,10 +368,7 @@ def limpiar_vehiculos_inactivos(cliente):
                 del estado_coches[vehicle_id]
 
     for vehicle_id in eliminados:
-        print(
-            f"[{RSU_ID}] Vehículo {vehicle_id} eliminado: "
-            f"más de {TIMEOUT_VEHICULO_S:.0f} s sin recibir telemetría"
-        )
+        print(f"[{RSU_ID}] Vehículo {vehicle_id} eliminado: más de {TIMEOUT_VEHICULO_S:.0f} s sin recibir telemetría")
 
     if eliminados:
         verificar_proximidad(cliente)
@@ -419,8 +379,9 @@ def hilo_limpieza(cliente):
         limpiar_vehiculos_inactivos(cliente)
 
 
+
 # ============================================================
-# RECEPCIÓN DE RESPUESTAS DEL CLOUD MEDIANTE SNS
+# REENVIO ALERTAS CLOUD
 # ============================================================
 
 def reenviar_alerta_cloud_por_mqtt(cliente, mensaje_cloud):
@@ -449,6 +410,13 @@ def reenviar_alerta_cloud_por_mqtt(cliente, mensaje_cloud):
         for vid in vehiculos_destinatarios:
             cliente.publish(f"vehiculos/{vid}/alertas", alerta_json, qos=1)
             print(f"[{RSU_ID}] Alerta Cloud enviada a {vid}: {alerta_evento['event_type']}", flush=True)
+
+
+
+
+# ============================================================
+# CLASES PARA SERVIDORES HTTP
+# ============================================================
 
 class ManejadorSNS(BaseHTTPRequestHandler):
     def _responder(self, codigo=200):
@@ -485,11 +453,7 @@ class ManejadorSNS(BaseHTTPRequestHandler):
             if tipo == "SubscriptionConfirmation":
                 subscribe_url = mensaje_sns.get("SubscribeURL")
 
-                print(
-                    f"[{RSU_ID}] Confirmando suscripción SNS: "
-                    f"{subscribe_url}",
-                    flush=True,
-                )
+                print(f"[{RSU_ID}] Confirmando suscripción SNS: {subscribe_url}", flush=True)
 
                 if subscribe_url:
                     urlopen(subscribe_url, timeout=10)
@@ -537,6 +501,8 @@ class ManejadorSNS(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         return
+
+
 
 class ManejadorDashboardRSU(BaseHTTPRequestHandler):
     def _responder_archivo(self, archivo, content_type):
@@ -596,41 +562,26 @@ class ManejadorDashboardRSU(BaseHTTPRequestHandler):
             self._responder_archivo(archivo, content_type)
             return
 
-        self._responder_json(
-            404,
-            {"error": "Ruta no encontrada"},
-        )
+        self._responder_json( 404, {"error": "Ruta no encontrada"} )
 
     def log_message(self, format, *args):
         return
 
+
 def iniciar_dashboard_rsu():
-    servidor = ThreadingHTTPServer(
-        ("0.0.0.0", RSU_DASHBOARD_PORT),
-        ManejadorDashboardRSU,
-    )
-
-    print(
-        f"[{RSU_ID}] Dashboard Edge escuchando en "
-        f"puerto {RSU_DASHBOARD_PORT}",
-        flush=True,
-    )
-
+    servidor = ThreadingHTTPServer( ("0.0.0.0", RSU_DASHBOARD_PORT), ManejadorDashboardRSU )
+    
+    print(f"[{RSU_ID}] Dashboard Edge escuchando en puerto {RSU_DASHBOARD_PORT}", flush=True)
     servidor.serve_forever()
+    
         
 def iniciar_servidor_sns():
-    servidor = ThreadingHTTPServer(
-        ("0.0.0.0", SNS_HTTP_PORT),
-        ManejadorSNS,
-    )
+    servidor = ThreadingHTTPServer( ("0.0.0.0", SNS_HTTP_PORT), ManejadorSNS )
 
-    print(
-        f"[{RSU_ID}] Endpoint SNS escuchando en "
-        f"puerto {SNS_HTTP_PORT}/sns",
-        flush=True,
-    )
-
+    print(f"[{RSU_ID}] Endpoint SNS escuchando en puerto {SNS_HTTP_PORT}/sns", flush=True,)
     servidor.serve_forever()
+
+
 
 
 def debe_enviar_a_cloud(event_data: dict) -> bool:
@@ -643,24 +594,21 @@ def debe_enviar_a_cloud(event_data: dict) -> bool:
     # accidente, obras, bache y coche_averiado irán al cloud.
     return True
 
+
+
 # ============================================================
 # MQTT
 # ============================================================
 
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
-        print(
-            f"[{RSU_ID}] Conectado al Broker MQTT en "
-            f"{MQTT_HOST}:{MQTT_PORT}"
-        )
+        print(f"[{RSU_ID}] Conectado al Broker MQTT en {MQTT_HOST}:{MQTT_PORT}")
 
         client.subscribe("vehiculos/+/telemetria")
         print(f"[{RSU_ID}] Suscrito a 'vehiculos/+/telemetria'")
 
     else:
-        print(
-            f"[{RSU_ID}] Error al conectar a MQTT, código: {rc}"
-        )
+        print(f"[{RSU_ID}] Error al conectar a MQTT, código: {rc}")
 
 
 def on_message(client, userdata, msg):
@@ -684,26 +632,16 @@ def on_message(client, userdata, msg):
             try:
                 cola_eventos.put_nowait(event_data)
 
-                print(
-                    f"☁️ [{RSU_ID}] Evento '{event_data.get('event_type')}' "
-                    f"({event_data.get('event_id')}) enviado al Cloud"
-                )
+                print(f"☁️ [{RSU_ID}] Evento '{event_data.get('event_type')}' ({event_data.get('event_id')}) enviado al Cloud")
 
             except queue.Full:
-                print(
-                    f"⚠️ [{RSU_ID}] Cola Cloud llena. Evento descartado: "
-                    f"{event_data.get('event_type')}"
-                )
+                print(f"⚠️ [{RSU_ID}] Cola Cloud llena. Evento descartado: {event_data.get('event_type')}")
 
     except json.JSONDecodeError:
-        print(
-            f"[{RSU_ID}] Trama no válida recibida en {msg.topic}"
-        )
+        print(f"[{RSU_ID}] Trama no válida recibida en {msg.topic}")
 
     except Exception as error:
-        print(
-            f"[{RSU_ID}] Error procesando mensaje MQTT: {error}"
-        )
+        print(f"[{RSU_ID}] Error procesando mensaje MQTT: {error}")
 
 
 # ============================================================
@@ -729,35 +667,19 @@ def main():
         cliente_mqtt.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
         cliente_mqtt.loop_start()
 
-        hilo_sns = threading.Thread(
-            target=iniciar_servidor_sns,
-            daemon=True,
-        )
+        hilo_sns = threading.Thread( target=iniciar_servidor_sns, daemon=True)
         hilo_sns.start()
 
-        hilo_dashboard = threading.Thread(
-            target=iniciar_dashboard_rsu,
-            daemon=True,
-        )
+        hilo_dashboard = threading.Thread( target=iniciar_dashboard_rsu, daemon=True)
         hilo_dashboard.start()
         
-        hilo_watchdog = threading.Thread(
-            target=hilo_limpieza,
-            args=(cliente_mqtt,),
-            daemon=True,
-        )
+        hilo_watchdog = threading.Thread( target=hilo_limpieza, args=(cliente_mqtt,), daemon=True)
         hilo_watchdog.start()
 
-        hilo_sqs = threading.Thread(
-            target=hilo_sqs_worker,
-            daemon=True,
-        )
+        hilo_sqs = threading.Thread( target=hilo_sqs_worker, daemon=True)
         hilo_sqs.start()
 
-        print(
-            f"[{RSU_ID}] RSU operativo. Presiona Ctrl+C para salir.\n"
-            + "-" * 50
-        )
+        print(f"[{RSU_ID}] RSU operativo. Presiona Ctrl+C para salir.\n" + "-" * 50)
 
         while True:
             time.sleep(1)
